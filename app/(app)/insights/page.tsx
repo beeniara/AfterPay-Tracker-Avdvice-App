@@ -85,19 +85,19 @@ export default async function InsightsPage() {
         />
       </HeroCard>
 
-      <Card>
+      <Card tint="tint-1">
         <h2 className="mb-4 text-heading">What to consider</h2>
         <AdviceList advice={insights.advice} />
       </Card>
 
-      <Card>
+      <Card tint="tint-2">
         <h2 className="mb-1 text-heading">Ask about your orders</h2>
         <p className="mb-4 text-caption text-ink-muted">Plain questions, answered from your own data by the model running on your PC.</p>
         <AskBox currency={user.currency} />
       </Card>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <Card className="mt-0">
+        <Card className="mt-0" tint="tint-3">
           <h2 className="mb-1 text-heading">The next three months</h2>
           <p className="mb-2 text-caption text-ink-muted">What falls due each month, with anything overdue counted in the first.</p>
           <dl>
@@ -112,7 +112,7 @@ export default async function InsightsPage() {
           </dl>
         </Card>
 
-        <Card className="mt-0">
+        <Card className="mt-0" tint="tint-3">
           <h2 className="mb-1 text-heading">Your plans at a glance</h2>
           <p className="mb-2 text-caption text-ink-muted">Everything you have recorded, paid off or not.</p>
           <dl>
@@ -140,7 +140,7 @@ export default async function InsightsPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card tint="tint-4">
         <h2 className="mb-1 text-heading">Your habits</h2>
         <p className="mb-2 text-caption text-ink-muted">How often, how much, and when you reach for an instalment plan.</p>
         <dl className="md:columns-2 md:gap-10">
@@ -172,7 +172,7 @@ export default async function InsightsPage() {
         </dl>
       </Card>
 
-      <Card>
+      <Card tint="tint-5">
         <h2 className="mb-1 text-heading">Your biggest orders</h2>
         <p className="mb-4 text-caption text-ink-muted">True cost is what the order came to once fees were added and refunds taken off.</p>
         <div className="overflow-x-auto">
@@ -213,7 +213,7 @@ export default async function InsightsPage() {
         </div>
       </Card>
 
-      <Card>
+      <Card tint="tint-5">
         <h2 className="mb-1 text-heading">Where you shop most</h2>
         <p className="mb-4 text-caption text-ink-muted">Tap a shop to see just its orders.</p>
         <div className="overflow-x-auto">
@@ -252,7 +252,7 @@ export default async function InsightsPage() {
         </div>
       </Card>
 
-      <Card>
+      <Card tint="tint-4">
         <h2 className="mb-1 text-heading">The last twelve months</h2>
         <p className="mb-4 text-caption text-ink-muted">What you put on instalments each month.</p>
         <ol className="grid gap-2">
@@ -274,7 +274,7 @@ export default async function InsightsPage() {
         </ol>
       </Card>
 
-      <Card>
+      <Card tint="tint-1">
         <h2 className="mb-4 text-heading">By provider</h2>
         <div className="overflow-x-auto">
           <table className="data-table">

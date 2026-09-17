@@ -1,15 +1,27 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
+export type CardTint = "surface" | "tint-1" | "tint-2" | "tint-3" | "tint-4" | "tint-5";
+
+const tints: Record<CardTint, string> = {
+  surface: "bg-surface",
+  "tint-1": "bg-tint-1",
+  "tint-2": "bg-tint-2",
+  "tint-3": "bg-tint-3",
+  "tint-4": "bg-tint-4",
+  "tint-5": "bg-tint-5",
+};
+
 type CardProps = {
   children: ReactNode;
   className?: string;
+  tint?: CardTint;
 };
 
-export function Card({ children, className }: CardProps) {
+export function Card({ children, className, tint = "surface" }: CardProps) {
   return (
     <section
-      className={cn("mt-4 rounded-card bg-surface px-7 py-6", className)}
+      className={cn("mt-4 rounded-card px-7 py-6", tints[tint], className)}
     >
       {children}
     </section>

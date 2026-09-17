@@ -110,8 +110,8 @@ function Suggestions({ label, items, onPick }: { label: string; items: string[];
 
 function ResultCard({ answer, note, sql, table, currency }: { answer: string; note?: string | null; sql?: string | null; table: ResultTable | null; currency: string }) {
   return (
-    <div className="grid gap-3 rounded-card border border-line p-4">
-      <p className="text-body font-medium">{answer}</p>
+    <div className="grid gap-3 rounded-card border-l-4 border-highlight-strong bg-highlight p-4 shadow-sm">
+      <p className="text-heading">{answer}</p>
       {note ? <p className="text-caption text-ink-muted">{note}</p> : null}
       {table && table.rows.length > 0 ? (
         <div className="overflow-x-auto">
@@ -284,7 +284,7 @@ export function AskBox({ currency }: { currency: string }) {
               const expanded = open === item.id;
               return (
                 <li key={item.id} className="py-3">
-                  <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+                  <div className="flex flex-col gap-2 rail:flex-row rail:items-start rail:gap-4">
                     <button
                       type="button"
                       onClick={() => setOpen(expanded ? null : item.id)}
@@ -296,15 +296,21 @@ export function AskBox({ currency }: { currency: string }) {
                         {formatDate(new Date(item.createdAt), "long")}
                         {item.error ? " · didn't work" : item.rowCount !== null ? ` · ${item.rowCount} row${item.rowCount === 1 ? "" : "s"}` : ""}
                         {item.durationMs ? ` · ${Math.round(item.durationMs / 1000)}s` : ""}
+                        {expanded ? " · tap to hide" : " · tap to see the answer"}
                       </span>
                     </button>
                     <div className="flex shrink-0 gap-2">
                       {ready ? (
-                        <Button variant="ghost" onClick={() => pick(item.question)}>
+                        <Button variant="ghost" className="px-3 py-1.5 text-caption" onClick={() => pick(item.question)}>
                           Ask again
                         </Button>
                       ) : null}
-                      <Button variant="ghost" onClick={() => void remove(item.id)} aria-label={`Delete "${item.question}"`}>
+                      <Button
+                        variant="ghost"
+                        className="px-3 py-1.5 text-caption"
+                        onClick={() => void remove(item.id)}
+                        aria-label={`Delete "${item.question}"`}
+                      >
                         Delete
                       </Button>
                     </div>

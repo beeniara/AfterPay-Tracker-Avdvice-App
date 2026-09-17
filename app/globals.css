@@ -29,6 +29,16 @@
   --color-danger: #c0392b;
   --color-danger-tint: #fbedeb;
 
+  /* Section tints: hue-shifted from the accent so groups read apart. */
+  --color-tint-1: hsl(var(--theme-hue) 90% 97%);
+  --color-tint-2: hsl(calc(var(--theme-hue) + 60) 80% 95%);
+  --color-tint-3: hsl(calc(var(--theme-hue) + 130) 55% 95%);
+  --color-tint-4: hsl(calc(var(--theme-hue) + 200) 75% 95%);
+  --color-tint-5: hsl(calc(var(--theme-hue) + 300) 70% 96%);
+  /* Answer highlight: deliberately off-accent so it stands out on any tint. */
+  --color-highlight: hsl(48 100% 88%);
+  --color-highlight-strong: hsl(40 90% 42%);
+
   --radius-card: 20px;
   --radius-chip: 10px;
   --radius-pill: 999px;
@@ -60,6 +70,14 @@
   --color-warning-tint: #3a2e0e;
   --color-danger: #e0574a;
   --color-danger-tint: #3d1a16;
+
+  --color-tint-1: hsl(var(--theme-hue) 30% 16%);
+  --color-tint-2: hsl(calc(var(--theme-hue) + 60) 25% 15%);
+  --color-tint-3: hsl(calc(var(--theme-hue) + 130) 22% 15%);
+  --color-tint-4: hsl(calc(var(--theme-hue) + 200) 28% 15%);
+  --color-tint-5: hsl(calc(var(--theme-hue) + 300) 25% 16%);
+  --color-highlight: hsl(48 55% 20%);
+  --color-highlight-strong: hsl(45 90% 62%);
 
   color-scheme: dark;
 }
@@ -106,6 +124,14 @@
   --color-warning-tint: var(--color-warning-tint);
   --color-danger: var(--color-danger);
   --color-danger-tint: var(--color-danger-tint);
+
+  --color-tint-1: var(--color-tint-1);
+  --color-tint-2: var(--color-tint-2);
+  --color-tint-3: var(--color-tint-3);
+  --color-tint-4: var(--color-tint-4);
+  --color-tint-5: var(--color-tint-5);
+  --color-highlight: var(--color-highlight);
+  --color-highlight-strong: var(--color-highlight-strong);
 
   --radius-card: var(--radius-card);
   --radius-chip: var(--radius-chip);
