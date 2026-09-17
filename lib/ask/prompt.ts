@@ -9,9 +9,15 @@ export const SCHEMA_DESCRIPTION = `Tables (already limited to this person's data
 - payments(id uuid, instalment_id uuid references instalments.id, amount_cents integer, paid_on date, method text one of 'card','bank','cash','other', reference text)
 - refunds(id uuid, order_id uuid references orders.id, amount_cents integer, refunded_on date, note text)
 
+Ready-made balance tables (prefer these for anything about owing, remaining, overdue or payments left; the maths is already done):
+- instalment_balances(instalment_id uuid, order_id uuid, sequence integer, due_on date, principal_cents, fees_cents, paid_cents, pending_cents, waived_cents, owed_cents integer, is_paid boolean, is_overdue boolean)
+- order_balances(order_id uuid, merchant text, provider_id uuid, purchased_at timestamptz, total_amount_cents, instalment_count integer, status text, owed_cents bigint, paid_cents bigint, fees_cents bigint, remaining_count bigint, paid_count bigint, next_due_on date)
+
 Facts:
 - All money is in integer cents. Keep every money column in the result named with a _cents suffix, e.g. SUM(total_amount_cents) AS spent_cents.
-- An instalment is unpaid while principal_cents + its fees - paid_cents - waived_cents > 0; it is overdue when also due_on < today.
+- "Payments left", "remaining", "still to pay" or "owing" mean unpaid instalments: use order_balances.remaining_count / owed_cents or instalment_balances WHERE NOT is_paid. The payments table is only the history of money already paid; never use it to answer what is left.
+- "Spent" or "bought" means orders.total_amount_cents; "paid" means order_balances.paid_cents.
+- Provider totals: join order_balances.provider_id to providers.id.
 - orders.status is 'active' while any instalment is unpaid, 'settled' once all are paid, 'cancelled' if voided.
 - Match merchant and provider names case-insensitively with ILIKE '%name%'.
 - Dates: purchased_at is a timestamp; use purchased_at::date for day grouping and date_trunc('month', purchased_at) for months.`;

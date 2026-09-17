@@ -32,7 +32,7 @@ describe("prompts", () => {
     const prompt = sqlSystemPrompt("2026-09-17", "NZD");
     expect(prompt).toContain("Today is 2026-09-17");
     expect(prompt).toContain("Amounts are in NZD");
-    for (const table of ["providers(", "orders(", "instalments(", "fees(", "payments(", "refunds("]) {
+    for (const table of ["providers(", "orders(", "instalments(", "fees(", "payments(", "refunds(", "instalment_balances(", "order_balances("]) {
       expect(prompt).toContain(table);
     }
   });
