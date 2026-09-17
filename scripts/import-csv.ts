@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { and, eq } from "drizzle-orm";
 import { colorSeedFor } from "@/lib/color-seed";
 import { parseCsv } from "@/lib/csv";
-import { assertIsoDate } from "@/lib/dates";
+import { addDays, assertIsoDate } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import { refreshOrderStatus } from "@/lib/db/orders";
 import {
@@ -15,7 +15,7 @@ import {
   users,
   type ProviderKind,
 } from "@/lib/db/schema";
-import { allocatePaid, computeOrder, generateSchedule } from "@/lib/ledger";
+import { alignToCycle, allocatePaid, computeOrder, generateSchedule } from "@/lib/ledger";
 import { parseAmount } from "@/lib/money";
 
 const { values: args } = parseArgs({
@@ -27,6 +27,11 @@ const { values: args } = parseArgs({
     user: { type: "string", default: "owner@localhost" },
     instalments: { type: "string", default: "4" },
     interval: { type: "string", default: "14" },
+    // A cycle day (YYYY-MM-DD) for providers that collect on fixed fortnightly
+    // days; the first instalment then falls on the last cycle day on or before
+    // purchase + interval. Omit for schedules that start on the purchase date.
+    "cycle-anchor": { type: "string" },
+    replace: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
   },
 });
@@ -44,7 +49,7 @@ const REQUIRED = [
 function usage(message: string): never {
   console.error(message);
   console.error(
-    "\nUsage: pnpm import:csv --file <path.csv> --provider <name> [--kind bnpl|store_finance|loan|other] [--currency NZD] [--user email] [--instalments 4] [--interval 14] [--dry-run]",
+    "\nUsage: pnpm import:csv --file <path.csv> --provider <name> [--kind bnpl|store_finance|loan|other] [--currency NZD] [--user email] [--instalments 4] [--interval 14] [--cycle-anchor YYYY-MM-DD] [--replace] [--dry-run]",
   );
   process.exit(1);
 }
@@ -55,6 +60,7 @@ async function main() {
   const currency = args.currency!;
   const instalmentCount = Number(args.instalments);
   const intervalDays = Number(args.interval);
+  const anchor = args["cycle-anchor"] ? assertIsoDate(args["cycle-anchor"]) : undefined;
   const dryRun = args["dry-run"]!;
 
   const { headers, rows } = parseCsv(readFileSync(args.file, "utf8"));
@@ -68,10 +74,13 @@ async function main() {
     const owing = parseAmount(row["Amount Owing"] ?? "", currency).cents;
     if (owing > total) throw new Error(`Line ${line}: owing exceeds total`);
 
+    const firstDueOn = anchor
+      ? alignToCycle(addDays(purchasedOn, intervalDays), anchor, intervalDays)
+      : purchasedOn;
     const schedule = generateSchedule({
       totalAmountCents: total,
       instalmentCount,
-      firstDueOn: purchasedOn,
+      firstDueOn,
       intervalDays,
     });
     const paid = allocatePaid(
@@ -149,6 +158,10 @@ async function main() {
         set: { updatedAt: new Date() },
       })
       .returning();
+
+    if (args.replace) {
+      await tx.delete(orders).where(eq(orders.providerId, provider!.id));
+    }
 
     for (const row of prepared) {
       const existing = await tx.query.orders.findFirst({

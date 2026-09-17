@@ -72,3 +72,45 @@ export function ChevronRightIcon(props: IconProps) {
     </Svg>
   );
 }
+
+export function CaretDownIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m5 9 7 7 7-7" />
+    </Svg>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Svg {...props} strokeWidth={3}>
+      <path d="m4 12.5 5 5L20 6.5" />
+    </Svg>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </Svg>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}
+
+export function AlertIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3 2.5 20h19z" />
+      <path d="M12 10v4M12 17h.01" />
+    </Svg>
+  );
+}

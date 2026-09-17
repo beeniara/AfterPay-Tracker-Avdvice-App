@@ -33,10 +33,16 @@ pnpm import:csv --file data/orders.csv --provider "My provider" --dry-run
 pnpm import:csv --file data/orders.csv --provider "My provider"
 ```
 
-The importer rebuilds each order's pay-in-4 schedule (fortnightly from the
-purchase date, last instalment absorbs rounding), allocates what has been paid
-in order, and refuses any row whose reconstructed balance doesn't match the
-CSV. Re-running skips orders already present by order number.
+The importer rebuilds each order's pay-in-4 schedule (last instalment absorbs
+rounding), allocates what has been paid in order, and refuses any row whose
+reconstructed balance doesn't match the CSV. Re-running skips orders already
+present by order number; `--replace` wipes that provider's orders first.
+
+By default instalments fall fortnightly from the purchase date. Providers that
+collect on a fixed fortnightly cycle instead take `--cycle-anchor YYYY-MM-DD`
+(any one of their collection days): the first instalment then lands on the
+last cycle day on or before purchase + 14 days. Check the result against the
+provider's own "due in 15/30/60 days" figures.
 
 ## Checks
 

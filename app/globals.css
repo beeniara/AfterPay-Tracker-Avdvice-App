@@ -5,8 +5,10 @@
  * appear. Swap this block to re-skin the whole app.
  */
 :root {
-  --color-primary: #e4e2ff;
-  --color-primary-press: #c9c5ff;
+  /* The accent is a hue; Settings > Appearance sets --theme-hue at runtime. */
+  --theme-hue: 244;
+  --color-primary: hsl(var(--theme-hue) 100% 94%);
+  --color-primary-press: hsl(var(--theme-hue) 100% 88%);
   --color-prominent: #16181d;
   --color-inverse: #ffffff;
 
@@ -37,8 +39,8 @@
 }
 
 :root[data-theme="dark"] {
-  --color-primary: #34306b;
-  --color-primary-press: #46418a;
+  --color-primary: hsl(var(--theme-hue) 40% 30%);
+  --color-primary-press: hsl(var(--theme-hue) 40% 38%);
   --color-prominent: #f2f2f5;
   --color-inverse: #16181d;
 
@@ -125,5 +127,150 @@
   :focus-visible {
     outline: 2px solid var(--color-prominent);
     outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Initial chip: hue comes from the merchant/provider name. */
+  .chip {
+    display: grid;
+    place-items: center;
+    flex: none;
+    overflow: hidden;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: hsl(var(--chip-hue) 60% 92%);
+    color: hsl(var(--chip-hue) 45% 30%);
+  }
+  :root[data-theme="dark"] .chip {
+    background: hsl(var(--chip-hue) 35% 26%);
+    color: hsl(var(--chip-hue) 60% 82%);
+  }
+
+  .swatch {
+    background: hsl(var(--swatch-hue) 100% 80%);
+  }
+  .hue-slider {
+    accent-color: var(--color-prominent);
+    background: linear-gradient(
+      to right,
+      hsl(0 100% 85%),
+      hsl(60 100% 85%),
+      hsl(120 100% 85%),
+      hsl(180 100% 85%),
+      hsl(240 100% 85%),
+      hsl(300 100% 85%),
+      hsl(360 100% 85%)
+    );
+    border-radius: var(--radius-pill);
+    height: 8px;
+    appearance: none;
+  }
+  .hue-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-surface);
+    border: 2px solid var(--color-prominent);
+  }
+
+  /* Row rhythm: 15px vertical, hairline divider, none after the last row. */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .data-table th {
+    padding: 0 12px 14px 0;
+    text-align: left;
+    font-size: var(--text-caption);
+    font-weight: 500;
+    color: var(--color-ink-muted);
+    border-bottom: 1px solid var(--color-line);
+    white-space: nowrap;
+  }
+  .data-table td {
+    padding: 15px 12px 15px 0;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .data-table th:last-child,
+  .data-table td:last-child {
+    padding-right: 0;
+  }
+  .data-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .data-table tr[data-overdue="true"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-danger);
+    padding-left: 12px;
+  }
+  .row-link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Vertical payment timeline. */
+  .timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .timeline > li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    column-gap: 14px;
+    padding-bottom: 20px;
+  }
+  .timeline > li:last-child {
+    padding-bottom: 0;
+  }
+  .timeline > li:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 10px;
+    top: 22px;
+    bottom: 0;
+    width: 2px;
+    background: var(--color-primary);
+  }
+  .timeline-dot {
+    position: relative;
+    z-index: 1;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-success);
+    display: grid;
+    place-items: center;
+  }
+  .timeline-dot[data-state="overdue"] {
+    background: var(--color-danger-tint);
+    color: var(--color-danger);
+  }
+  .timeline-dot[data-state="pending"] {
+    background: var(--color-warning-tint);
+    color: var(--color-warning);
+  }
+  .timeline summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .timeline summary::-webkit-details-marker {
+    display: none;
+  }
+  .caret {
+    transition: transform 200ms ease;
+  }
+  .timeline details[open] .caret {
+    transform: rotate(180deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .caret {
+      transition: none;
+    }
   }
 }

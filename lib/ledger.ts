@@ -1,4 +1,4 @@
-import { addDays, assertIsoDate } from "@/lib/dates";
+import { addDays, assertIsoDate, daysBetween } from "@/lib/dates";
 
 export type InstalmentState = "paid" | "pending" | "overdue" | "upcoming";
 export type OrderStatus = "active" | "settled" | "cancelled";
@@ -167,6 +167,13 @@ export function generateSchedule({
     dueOn: addDays(firstDueOn, index * intervalDays),
     principalCents: index === instalmentCount - 1 ? last : each,
   }));
+}
+
+// Some providers collect on a fixed fortnightly cycle rather than relative to
+// each purchase: returns the latest cycle day on or before `date`.
+export function alignToCycle(date: string, anchor: string, intervalDays = 14): string {
+  const steps = Math.floor(daysBetween(anchor, date) / intervalDays);
+  return addDays(anchor, steps * intervalDays);
 }
 
 // Spreads a known total paid across instalments in order; any excess lands

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  alignToCycle,
   allocatePaid,
   computeInstalment,
   computeOrder,
@@ -331,6 +332,24 @@ describe("generateSchedule", () => {
     expect(() =>
       generateSchedule({ totalAmountCents: 100, instalmentCount: 4, firstDueOn: "1/1/2026" }),
     ).toThrow(/YYYY-MM-DD/);
+  });
+});
+
+describe("alignToCycle", () => {
+  const anchor = "2026-09-24";
+
+  it("snaps to the latest cycle day on or before the date", () => {
+    expect(alignToCycle("2026-08-14", anchor)).toBe("2026-08-13");
+    expect(alignToCycle("2026-09-10", anchor)).toBe("2026-09-10");
+    expect(alignToCycle("2026-09-28", anchor)).toBe("2026-09-24");
+    expect(alignToCycle("2026-10-01", anchor)).toBe("2026-09-24");
+    expect(alignToCycle("2026-10-08", anchor)).toBe("2026-10-08");
+  });
+
+  it("works before the anchor and with other intervals", () => {
+    expect(alignToCycle("2025-01-01", anchor)).toBe("2024-12-19");
+    expect(alignToCycle("2026-09-30", anchor, 7)).toBe("2026-09-24");
+    expect(alignToCycle("2026-10-02", anchor, 7)).toBe("2026-10-01");
   });
 });
 
