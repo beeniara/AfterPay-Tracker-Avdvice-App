@@ -1,21 +1,50 @@
 services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    ports:
+      - "${APP_PORT:-127.0.0.1:8091}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+    volumes:
+      - ./public:/app/public:ro
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: owing
-      POSTGRES_USER: owing
-      POSTGRES_PASSWORD: owing
+      POSTGRES_DB: ${DB_NAME:-owing}
+      POSTGRES_USER: ${DB_USER:-owing}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5433:5432"
+      - "${FORWARD_DB_PORT:-127.0.0.1:5434}:5432"
     volumes:
       - owing-pgdata:/var/lib/postgresql/data
       - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U owing -d owing"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-owing} -d ${DB_NAME:-owing}"]
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   owing-pgdata:
