@@ -6,6 +6,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
     ports:
       - "${APP_PORT:-127.0.0.1:8091}:80"
     depends_on:
