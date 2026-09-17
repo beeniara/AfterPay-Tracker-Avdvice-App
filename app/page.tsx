@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RecordPaymentDialog } from "@/components/actions/record-payment-dialog";
 import { AlertIcon, CalendarIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, HeroCard, HeroFigure } from "@/components/ui/card";
@@ -73,22 +74,29 @@ export default async function DashboardPage() {
             {nextTwo.map((i) => {
               const due = describeDue(i.dueOn, today);
               return (
-                <Link
+                <div
                   key={i.id}
-                  href={`/orders/${i.order.id}`}
-                  className="flex items-center gap-3.5 rounded-card border border-line p-4 hover:bg-surface-sunken/60"
+                  className="relative flex items-center gap-3.5 rounded-card border border-line p-4 hover:bg-surface-sunken/60"
                 >
                   <Chip name={i.order.merchant} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{i.order.merchant}</span>
+                    <Link href={`/orders/${i.order.id}`} className="row-link block truncate font-semibold">
+                      {i.order.merchant}
+                    </Link>
                     <span className="block text-caption text-ink-muted">
                       {ordinalOf(i.sequence, i.order.instalmentCount)} · {due.label} · {formatDate(i.dueOn, "dayMonth")}
                     </span>
                   </span>
-                  <span className="rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold tabular-nums">
-                    {money(i.amountOwed)}
-                  </span>
-                </Link>
+                  <RecordPaymentDialog
+                    instalmentId={i.id}
+                    currency={user.currency}
+                    defaultAmountCents={i.amountPayable}
+                    today={today}
+                    description={`${i.order.merchant} · ${ordinalOf(i.sequence, i.order.instalmentCount)} · due ${formatDate(i.dueOn, "long")}`}
+                    triggerLabel={`Pay ${money(i.amountPayable)}`}
+                    className="relative z-10"
+                  />
+                </div>
               );
             })}
           </div>

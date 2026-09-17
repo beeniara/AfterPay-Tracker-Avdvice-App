@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronRightIcon } from "@/components/icons";
+import { RecordPaymentDialog } from "@/components/actions/record-payment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { Card, HeroCard, HeroFigure } from "@/components/ui/card";
@@ -88,7 +88,14 @@ export default async function UpcomingPage() {
                       <td className="whitespace-nowrap text-ink-secondary">{formatDate(i.dueOn, "long")}</td>
                       <td className="text-right font-semibold tabular-nums">{money(i.amountOwed)}</td>
                       <td className="text-right">
-                        <ChevronRightIcon className="inline size-3.5 text-ink-subtle" />
+                        <RecordPaymentDialog
+                          instalmentId={i.id}
+                          currency={user.currency}
+                          defaultAmountCents={i.amountPayable}
+                          today={today}
+                          description={`${i.order.merchant} · ${ordinalOf(i.sequence, i.order.instalmentCount)} · due ${formatDate(i.dueOn, "long")}`}
+                          className="relative z-10"
+                        />
                       </td>
                     </tr>
                   );

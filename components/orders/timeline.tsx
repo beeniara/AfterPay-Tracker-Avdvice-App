@@ -1,3 +1,5 @@
+import { RecordFeeDialog } from "@/components/actions/record-fee-dialog";
+import { RecordPaymentDialog } from "@/components/actions/record-payment-dialog";
 import { CaretDownIcon, CheckIcon } from "@/components/icons";
 import type { OrderDetail } from "@/lib/db/queries";
 import { formatCents, formatDate, ordinalOf } from "@/lib/format";
@@ -13,7 +15,7 @@ const STATE_LABEL: Record<InstalmentState, string> = {
 const METHOD_LABEL = { card: "Card", bank: "Bank", cash: "Cash", other: "Other" } as const;
 const FEE_LABEL = { late: "Late fee", establishment: "Establishment fee", other: "Fee" } as const;
 
-export function Timeline({ order }: { order: OrderDetail }) {
+export function Timeline({ order, today }: { order: OrderDetail; today: string }) {
   const { currency, ledger } = order;
   const count = ledger.instalments.length;
   const money = (cents: number) => formatCents(cents, currency);
@@ -62,6 +64,23 @@ export function Timeline({ order }: { order: OrderDetail }) {
                 {i.waivedCents > 0 ? <Row label="Waived" value={`−${money(i.waivedCents)}`} /> : null}
                 <dt className="font-semibold text-ink">Still owing</dt>
                 <dd className="text-right font-semibold tabular-nums">{money(i.amountOwed)}</dd>
+                <div className="col-span-2 mt-2 flex flex-wrap gap-2">
+                  <RecordPaymentDialog
+                    instalmentId={i.id}
+                    currency={currency}
+                    defaultAmountCents={i.amountPayable}
+                    today={today}
+                    description={`${order.merchant} · ${ordinalOf(i.sequence, count)} · ${money(i.amountPayable)} payable`}
+                    triggerLabel={i.state === "paid" ? "Record payment" : "Mark paid"}
+                    variant="prominent"
+                  />
+                  <RecordFeeDialog
+                    instalmentId={i.id}
+                    currency={currency}
+                    today={today}
+                    description={`${order.merchant} · ${ordinalOf(i.sequence, count)}`}
+                  />
+                </div>
               </dl>
             </details>
           </li>

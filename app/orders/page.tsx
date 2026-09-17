@@ -75,7 +75,10 @@ export default async function OrdersPage({
           label={`${summary.activeOrders} active of ${summary.totalOrders} orders`}
           value={formatCents(summary.total, user.currency)}
         />
-        <BreakdownDialog periods={summary.duePeriods} currency={user.currency} />
+        <div className="flex gap-2">
+          <ButtonLink href="/orders/new" variant="ghost">Add order</ButtonLink>
+          <BreakdownDialog periods={summary.duePeriods} currency={user.currency} />
+        </div>
       </HeroCard>
       <Card>
         <FilterBar filters={filters} providers={providers} hasFilters={hasFilters} />

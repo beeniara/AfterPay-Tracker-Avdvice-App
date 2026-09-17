@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DeleteOrderButton } from "@/components/actions/delete-order-button";
+import { RecordRefundDialog } from "@/components/actions/record-refund-dialog";
 import { Timeline } from "@/components/orders/timeline";
 import { Badge, StatusBadge } from "@/components/ui/badge";
+import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { NoData } from "@/components/ui/no-data";
@@ -34,7 +37,6 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
   const { ledger, currency } = order;
   const money = (cents: number) => formatCents(cents, currency);
-  const paidWithFees = ledger.totalPaid;
 
   return (
     <>
@@ -53,6 +55,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <div className="ml-auto"><StatusBadge status={ledger.status} /></div>
       </section>
 
+      <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
+        <ButtonLink href={`/orders/${order.id}/edit`} variant="ghost">Edit</ButtonLink>
+        <RecordRefundDialog orderId={order.id} currency={currency} today={ctx.today} />
+        <span className="ml-auto"><DeleteOrderButton orderId={order.id} merchant={order.merchant} /></span>
+      </div>
+
       <Card>
         <div className="grid gap-12 md:grid-cols-2">
           <div>
@@ -61,11 +69,10 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <dl>
               <KeyValue label="Purchase date" value={formatDate(order.purchasedAt, "long")} />
               <KeyValue label="Order amount" value={money(order.totalAmountCents)} />
-              <KeyValue
-                label="Total paid"
-                value={money(paidWithFees)}
-                sub={ledger.totalFees > 0 ? `incl. ${money(ledger.totalFees)} fees` : undefined}
-              />
+              <KeyValue label="Total paid" value={money(ledger.totalPaid)} />
+              {ledger.totalFees > 0 ? (
+                <KeyValue label="Fees added" value={`+${money(ledger.totalFees)}`} />
+              ) : null}
               {ledger.amountRefunded > 0 ? (
                 <KeyValue label="Refunded" value={`−${money(ledger.amountRefunded)}`} />
               ) : null}
@@ -118,7 +125,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
             <h2 className="mt-7 mb-4 text-heading">Payment schedule</h2>
-            <Timeline order={order} />
+            <Timeline order={order} today={ctx.today} />
           </div>
         </div>
       </Card>

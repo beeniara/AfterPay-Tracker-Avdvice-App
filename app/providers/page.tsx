@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { DeleteProviderButton, ProviderDialog } from "@/components/providers/provider-dialog";
 import { Card, HeroCard, HeroFigure } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -37,8 +38,9 @@ export default async function ProvidersPage() {
   return (
     <>
       <PageTitle>Providers</PageTitle>
-      <HeroCard heading="Who you owe">
-        <HeroFigure label={`${stats.length} providers`} value={money(total)} />
+      <HeroCard heading="Who you owe" className="flex items-center justify-between">
+        <HeroFigure label={`${stats.length} ${stats.length === 1 ? "provider" : "providers"}`} value={money(total)} />
+        <ProviderDialog />
       </HeroCard>
       <Card>
         {stats.length === 0 ? (
@@ -46,6 +48,7 @@ export default async function ProvidersPage() {
             glyph="+"
             title="No providers yet"
             description="A provider is whoever you owe the money to. Add one before adding orders."
+            action={<ProviderDialog />}
           />
         ) : (
           <ul className="divide-y divide-line">
@@ -61,6 +64,10 @@ export default async function ProvidersPage() {
                   </div>
                 </div>
                 <div className="text-right font-semibold tabular-nums">{money(owedAmount)}</div>
+                <div className="flex items-center gap-1 pl-3">
+                  <ProviderDialog provider={provider} />
+                  {activeOrders === 0 ? <DeleteProviderButton provider={provider} /> : null}
+                </div>
               </li>
             ))}
           </ul>
