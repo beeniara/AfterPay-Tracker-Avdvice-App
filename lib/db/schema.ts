@@ -212,6 +212,26 @@ export const refunds = pgTable(
   (t) => [index("refunds_order_idx").on(t.orderId)],
 );
 
+export const askHistory = pgTable(
+  "ask_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    question: text("question").notNull(),
+    answer: text("answer"),
+    sql: text("sql"),
+    note: text("note"),
+    model: text("model"),
+    rowCount: integer("row_count"),
+    error: text("error"),
+    durationMs: integer("duration_ms").notNull().default(0),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("ask_history_user_created_idx").on(t.userId, t.createdAt)],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   providers: many(providers),
   orders: many(orders),
@@ -274,6 +294,7 @@ export type Fee = typeof fees.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type Refund = typeof refunds.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+export type AskHistoryRow = typeof askHistory.$inferSelect;
 export type Passkey = typeof passkeys.$inferSelect;
 export type ProviderKind = Provider["kind"];
 export type OrderChannel = Order["channel"];

@@ -7,9 +7,10 @@ import { FormError } from "@/components/ui/field";
 import { sendJson } from "@/lib/client/api";
 import type { ModelStatus } from "@/lib/ask/ollama";
 import { isMoneyColumn, type ResultTable } from "@/lib/ask/prompt";
-import { formatCents } from "@/lib/format";
+import { formatCents, formatDate } from "@/lib/format";
 
 interface AskResponse {
+  id: string;
   answer: string;
   note: string;
   sql: string;
@@ -17,11 +18,29 @@ interface AskResponse {
   model: string;
 }
 
+interface HistoryItem {
+  id: string;
+  question: string;
+  answer: string | null;
+  sql: string | null;
+  note: string | null;
+  model: string | null;
+  rowCount: number | null;
+  error: string | null;
+  durationMs: number;
+  createdAt: string;
+}
+
+interface History {
+  mine: HistoryItem[];
+  shared: string[];
+}
+
 const EXAMPLES = [
   "How much did I spend at each shop this year?",
   "Which orders still have more than two payments left?",
   "What did I buy last December?",
-  "How many orders over $200 do I have?",
+  "Which payments are overdue right now?",
 ];
 
 function Guidance({ status }: { status: ModelStatus }) {
@@ -52,7 +71,7 @@ function Guidance({ status }: { status: ModelStatus }) {
       return (
         <p className={step}>
           Ollama is running on <code className="rounded bg-surface-chip px-1">{status.host}</code> but has no models installed. On the PC run{" "}
-          <code className="rounded bg-surface-chip px-1">ollama pull qwen2.5-coder:7b</code>, then check again.
+          <code className="rounded bg-surface-chip px-1">ollama pull qwen2.5-coder:14b</code>, then check again.
         </p>
       );
     case "model-missing":
@@ -68,12 +87,81 @@ function Guidance({ status }: { status: ModelStatus }) {
   }
 }
 
+function Suggestions({ label, items, onPick }: { label: string; items: string[]; onPick: (q: string) => void }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="grid gap-1.5">
+      <span className="text-caption font-medium text-ink-muted">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onPick(item)}
+            className="rounded-pill border border-line px-3 py-1 text-left text-caption text-ink-secondary hover:bg-surface-chip"
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResultCard({ answer, note, sql, table, currency }: { answer: string; note?: string | null; sql?: string | null; table: ResultTable | null; currency: string }) {
+  return (
+    <div className="grid gap-3 rounded-card border border-line p-4">
+      <p className="text-body font-medium">{answer}</p>
+      {note ? <p className="text-caption text-ink-muted">{note}</p> : null}
+      {table && table.rows.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                {table.columns.map((c) => (
+                  <th key={c} scope="col" className={isMoneyColumn(c) ? "text-right" : ""}>
+                    {(isMoneyColumn(c) ? c.replace(/_cents$/i, "") : c).replace(/_/g, " ")}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row, i) => (
+                <tr key={i}>
+                  {row.map((cell, j) => {
+                    const column = table.columns[j]!;
+                    const money = isMoneyColumn(column) && typeof cell === "number";
+                    return (
+                      <td key={column} data-label={column.replace(/_cents$/i, "").replace(/_/g, " ")} className={money ? "text-right tabular-nums" : ""}>
+                        {money ? formatCents(cell, currency) : cell === null ? "—" : String(cell)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {table.truncated ? <p className="mt-2 text-caption text-ink-muted">Showing the first {table.rows.length} rows.</p> : null}
+        </div>
+      ) : null}
+      {sql ? (
+        <details className="text-caption text-ink-muted">
+          <summary className="cursor-pointer">How it was worked out</summary>
+          <pre className="mt-2 overflow-x-auto rounded-chip bg-surface-sunken p-3 text-[12px] whitespace-pre-wrap">{sql}</pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 export function AskBox({ currency }: { currency: string }) {
   const [status, setStatus] = useState<ModelStatus | "checking">("checking");
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AskResponse | null>(null);
+  const [history, setHistory] = useState<History>({ mine: [], shared: [] });
+  const [open, setOpen] = useState<string | null>(null);
 
   const check = useCallback(async () => {
     setStatus("checking");
@@ -85,13 +173,23 @@ export function AskBox({ currency }: { currency: string }) {
     }
   }, []);
 
+  const loadHistory = useCallback(async () => {
+    try {
+      const response = await fetch("/api/ask/history");
+      if (response.ok) setHistory((await response.json()) as History);
+    } catch {
+      // History is a convenience; the box still works without it.
+    }
+  }, []);
+
   useEffect(() => {
     void check();
-  }, [check]);
+    void loadHistory();
+  }, [check, loadHistory]);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
+  async function submit(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (busy || question.trim().length < 3) return;
     setBusy(true);
     setError(null);
     setResult(null);
@@ -100,6 +198,7 @@ export function AskBox({ currency }: { currency: string }) {
     if (!res.ok) {
       setError(res.error);
       if (/lost contact|isn't answering|HTTP 503/i.test(res.error)) void check();
+      void loadHistory();
       return;
     }
     if ("status" in res.data) {
@@ -107,9 +206,23 @@ export function AskBox({ currency }: { currency: string }) {
       return;
     }
     setResult(res.data);
+    void loadHistory();
+  }
+
+  async function remove(id: string) {
+    const res = await sendJson("DELETE", `/api/ask/history/${id}`);
+    if (res.ok) {
+      setHistory((h) => ({ ...h, mine: h.mine.filter((item) => item.id !== id) }));
+      if (result?.id === id) setResult(null);
+    }
   }
 
   const ready = status !== "checking" && status.state === "ready";
+  const pick = (q: string) => {
+    setQuestion(q);
+    setResult(null);
+    setError(null);
+  };
 
   return (
     <div>
@@ -150,17 +263,9 @@ export function AskBox({ currency }: { currency: string }) {
             <span className="text-caption text-ink-muted">Runs on your PC; nothing leaves your own machines. Can take a little while.</span>
           </div>
           {!result && !busy ? (
-            <div className="flex flex-wrap gap-2">
-              {EXAMPLES.map((example) => (
-                <button
-                  key={example}
-                  type="button"
-                  onClick={() => setQuestion(example)}
-                  className="rounded-pill border border-line px-3 py-1 text-caption text-ink-secondary hover:bg-surface-chip"
-                >
-                  {example}
-                </button>
-              ))}
+            <div className="grid gap-3">
+              <Suggestions label="Try one of these" items={EXAMPLES} onPick={pick} />
+              <Suggestions label="Questions others have asked" items={history.shared} onPick={pick} />
             </div>
           ) : null}
         </form>
@@ -168,50 +273,57 @@ export function AskBox({ currency }: { currency: string }) {
 
       <div className="mt-3 grid gap-3">
         <FormError message={error} />
-        {result ? (
-          <div className="grid gap-3 rounded-card border border-line p-4">
-            <p className="text-body font-medium">{result.answer}</p>
-            {result.note ? <p className="text-caption text-ink-muted">{result.note}</p> : null}
-            {result.table && result.table.rows.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      {result.table.columns.map((c) => (
-                        <th key={c} scope="col" className={isMoneyColumn(c) ? "text-right" : ""}>
-                          {(isMoneyColumn(c) ? c.replace(/_cents$/i, "") : c).replace(/_/g, " ")}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.table.rows.map((row, i) => (
-                      <tr key={i}>
-                        {row.map((cell, j) => {
-                          const column = result.table!.columns[j]!;
-                          const money = isMoneyColumn(column) && typeof cell === "number";
-                          return (
-                            <td key={column} data-label={column.replace(/_cents$/i, "").replace(/_/g, " ")} className={money ? "text-right tabular-nums" : ""}>
-                              {money ? formatCents(cell, currency) : cell === null ? "—" : String(cell)}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {result.table.truncated ? <p className="mt-2 text-caption text-ink-muted">Showing the first {result.table.rows.length} rows.</p> : null}
-              </div>
-            ) : null}
-            {result.sql ? (
-              <details className="text-caption text-ink-muted">
-                <summary className="cursor-pointer">How it was worked out</summary>
-                <pre className="mt-2 overflow-x-auto rounded-chip bg-surface-sunken p-3 text-[12px] whitespace-pre-wrap">{result.sql}</pre>
-              </details>
-            ) : null}
-          </div>
-        ) : null}
+        {result ? <ResultCard answer={result.answer} note={result.note} sql={result.sql} table={result.table} currency={currency} /> : null}
       </div>
+
+      {history.mine.length > 0 ? (
+        <div className="mt-6">
+          <h3 className="mb-2 text-body font-semibold">Your recent questions</h3>
+          <ol className="divide-y divide-line">
+            {history.mine.map((item) => {
+              const expanded = open === item.id;
+              return (
+                <li key={item.id} className="py-3">
+                  <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setOpen(expanded ? null : item.id)}
+                      aria-expanded={expanded}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <span className="block font-medium">{item.question}</span>
+                      <span className="block text-caption text-ink-muted">
+                        {formatDate(new Date(item.createdAt), "long")}
+                        {item.error ? " · didn't work" : item.rowCount !== null ? ` · ${item.rowCount} row${item.rowCount === 1 ? "" : "s"}` : ""}
+                        {item.durationMs ? ` · ${Math.round(item.durationMs / 1000)}s` : ""}
+                      </span>
+                    </button>
+                    <div className="flex shrink-0 gap-2">
+                      {ready ? (
+                        <Button variant="ghost" onClick={() => pick(item.question)}>
+                          Ask again
+                        </Button>
+                      ) : null}
+                      <Button variant="ghost" onClick={() => void remove(item.id)} aria-label={`Delete "${item.question}"`}>
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                  {expanded ? (
+                    <div className="mt-3">
+                      {item.error ? (
+                        <p className="rounded-chip bg-danger-tint px-3 py-2 text-caption text-danger">{item.error}</p>
+                      ) : (
+                        <ResultCard answer={item.answer ?? ""} note={item.note} sql={item.sql} table={null} currency={currency} />
+                      )}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ) : null}
     </div>
   );
 }
