@@ -1,22 +1,11 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { and, eq } from "drizzle-orm";
-import { colorSeedFor } from "@/lib/color-seed";
 import { parseCsv } from "@/lib/csv";
-import { addDays, assertIsoDate } from "@/lib/dates";
+import { assertIsoDate } from "@/lib/dates";
 import { getDb } from "@/lib/db";
-import { refreshOrderStatus } from "@/lib/db/orders";
-import {
-  instalments,
-  orders,
-  payments,
-  providers,
-  users,
-  type ProviderKind,
-} from "@/lib/db/schema";
-import { alignToCycle, allocatePaid, computeOrder, generateSchedule } from "@/lib/ledger";
-import { parseAmount } from "@/lib/money";
+import { users, type ProviderKind } from "@/lib/db/schema";
+import { commitImport, prepareImport } from "@/lib/import/orders";
 
 const { values: args } = parseArgs({
   options: {
@@ -36,15 +25,15 @@ const { values: args } = parseArgs({
   },
 });
 
-const REQUIRED = [
-  "Date",
-  "Merchant",
-  "Status",
-  "Channel",
-  "Order No",
-  "Order Amount",
-  "Amount Owing",
-] as const;
+const COLUMNS = {
+  date: "Date",
+  merchant: "Merchant",
+  status: "Status",
+  channel: "Channel",
+  reference: "Order No",
+  totalAmount: "Order Amount",
+  amountOwing: "Amount Owing",
+} as const;
 
 function usage(message: string): never {
   console.error(message);
@@ -56,172 +45,55 @@ function usage(message: string): never {
 
 async function main() {
   if (!args.file || !args.provider) usage("--file and --provider are required");
-  const kind = args.kind as ProviderKind;
-  const currency = args.currency!;
-  const instalmentCount = Number(args.instalments);
-  const intervalDays = Number(args.interval);
-  const anchor = args["cycle-anchor"] ? assertIsoDate(args["cycle-anchor"]) : undefined;
-  const dryRun = args["dry-run"]!;
 
   const { headers, rows } = parseCsv(readFileSync(args.file, "utf8"));
-  const missing = REQUIRED.filter((h) => !headers.includes(h));
+  const missing = Object.values(COLUMNS).filter((h) => !headers.includes(h));
   if (missing.length) usage(`CSV is missing columns: ${missing.join(", ")}`);
 
-  const prepared = rows.map((row, index) => {
-    const line = index + 2;
-    const purchasedOn = assertIsoDate(row.Date ?? "");
-    const total = parseAmount(row["Order Amount"] ?? "", currency).cents;
-    const owing = parseAmount(row["Amount Owing"] ?? "", currency).cents;
-    if (owing > total) throw new Error(`Line ${line}: owing exceeds total`);
-
-    const firstDueOn = anchor
-      ? alignToCycle(addDays(purchasedOn, intervalDays), anchor, intervalDays)
-      : purchasedOn;
-    const schedule = generateSchedule({
-      totalAmountCents: total,
-      instalmentCount,
-      firstDueOn,
-      intervalDays,
-    });
-    const paid = allocatePaid(
-      schedule.map((s) => s.principalCents),
-      total - owing,
-    );
-    const ledger = computeOrder(
-      {
-        totalAmountCents: total,
-        refunds: [],
-        instalments: schedule.map((s, i) => ({
-          ...s,
-          paidCents: paid[i] ?? 0,
-          pendingCents: 0,
-          waivedCents: 0,
-          fees: [],
-        })),
-      },
-      purchasedOn,
-    );
-    if (ledger.owedAmount !== owing) {
-      throw new Error(`Line ${line}: reconstructed owing ${ledger.owedAmount} != ${owing}`);
-    }
-    const statusMismatch =
-      (row.Status?.toLowerCase() === "completed") !== (owing === 0);
-
-    return {
-      line,
-      merchant: row.Merchant ?? "",
-      reference: row["Order No"] ?? "",
-      channel: /in.?store/i.test(row.Channel ?? "") ? ("in_store" as const) : ("online" as const),
-      purchasedOn,
-      total,
-      owing,
-      schedule,
-      paid,
-      statusMismatch,
-    };
-  });
-
-  const mismatches = prepared.filter((p) => p.statusMismatch);
-  console.log(`Parsed ${prepared.length} rows from ${args.file}`);
-  console.log(
-    `Total: ${sumOf(prepared.map((p) => p.total))}  Owing: ${sumOf(prepared.map((p) => p.owing))}  (minor units)`,
+  const options = {
+    providerName: args.provider,
+    providerKind: args.kind as ProviderKind,
+    currency: args.currency!,
+    instalmentCount: Number(args.instalments),
+    intervalDays: Number(args.interval),
+    cycleAnchor: args["cycle-anchor"] ? assertIsoDate(args["cycle-anchor"]) : undefined,
+    replace: args.replace!,
+  };
+  const plan = prepareImport(
+    rows.map((r) => ({
+      date: r[COLUMNS.date] ?? "",
+      merchant: r[COLUMNS.merchant] ?? "",
+      status: r[COLUMNS.status],
+      channel: r[COLUMNS.channel],
+      reference: r[COLUMNS.reference] ?? "",
+      totalAmount: r[COLUMNS.totalAmount] ?? "",
+      amountOwing: r[COLUMNS.amountOwing] ?? "",
+    })),
+    options,
   );
-  for (const m of mismatches) {
-    console.warn(`Line ${m.line}: status column disagrees with amount owing (${m.reference})`);
+
+  console.log(`Parsed ${rows.length} rows from ${args.file}: ${plan.rows.length} valid, ${plan.errors.length} with errors`);
+  console.log(`Total: ${plan.totalCents}  Owing: ${plan.owingCents}  (minor units)`);
+  for (const e of plan.errors) console.warn(`Line ${e.line}: ${e.message}`);
+  if (plan.statusMismatches) console.warn(`${plan.statusMismatches} rows where the status column disagrees with the amount owing`);
+  if (plan.errors.length) {
+    console.error("Fix the rows above and re-run.");
+    process.exit(1);
   }
-  if (dryRun) {
+  if (args["dry-run"]) {
     console.log("Dry run — nothing written.");
     return;
   }
 
   const db = getDb();
-  let imported = 0;
-  let skipped = 0;
-
-  await db.transaction(async (tx) => {
-    const [user] = await tx
-      .insert(users)
-      .values({ email: args.user!, currency })
-      .onConflictDoUpdate({ target: users.email, set: { email: args.user! } })
-      .returning();
-
-    const [provider] = await tx
-      .insert(providers)
-      .values({
-        userId: user!.id,
-        name: args.provider!,
-        kind,
-        colorSeed: colorSeedFor(args.provider!),
-      })
-      .onConflictDoUpdate({
-        target: [providers.userId, providers.name],
-        set: { updatedAt: new Date() },
-      })
-      .returning();
-
-    if (args.replace) {
-      await tx.delete(orders).where(eq(orders.providerId, provider!.id));
-    }
-
-    for (const row of prepared) {
-      const existing = await tx.query.orders.findFirst({
-        where: and(eq(orders.providerId, provider!.id), eq(orders.reference, row.reference)),
-        columns: { id: true },
-      });
-      if (existing) {
-        skipped++;
-        continue;
-      }
-
-      const [order] = await tx
-        .insert(orders)
-        .values({
-          userId: user!.id,
-          providerId: provider!.id,
-          merchant: row.merchant,
-          reference: row.reference,
-          channel: row.channel,
-          purchasedAt: new Date(`${row.purchasedOn}T00:00:00Z`),
-          totalAmountCents: row.total,
-          currency,
-          instalmentCount,
-        })
-        .returning();
-
-      const inserted = await tx
-        .insert(instalments)
-        .values(
-          row.schedule.map((s, i) => ({
-            orderId: order!.id,
-            sequence: s.sequence,
-            dueOn: s.dueOn,
-            principalCents: s.principalCents,
-            paidCents: row.paid[i] ?? 0,
-          })),
-        )
-        .returning();
-
-      const paymentRows = inserted
-        .filter((i) => i.paidCents > 0)
-        .map((i) => ({
-          instalmentId: i.id,
-          amountCents: i.paidCents,
-          paidOn: i.dueOn,
-          method: "card" as const,
-        }));
-      if (paymentRows.length) await tx.insert(payments).values(paymentRows);
-
-      await refreshOrderStatus(tx, order!.id);
-      imported++;
-    }
-  });
-
-  console.log(`Imported ${imported} orders, skipped ${skipped} already present.`);
+  const [user] = await db
+    .insert(users)
+    .values({ email: args.user!, currency: options.currency })
+    .onConflictDoUpdate({ target: users.email, set: { email: args.user! } })
+    .returning();
+  const result = await commitImport(db, user!.id, plan, options);
+  console.log(`Imported ${result.imported} orders, skipped ${result.skipped} already present.`);
   await db.$client.end();
-}
-
-function sumOf(values: number[]): number {
-  return values.reduce((a, b) => a + b, 0);
 }
 
 main().catch((error) => {

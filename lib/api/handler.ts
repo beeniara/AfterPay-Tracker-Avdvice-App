@@ -5,13 +5,20 @@ import { getPageContext, type PageContext } from "@/lib/db/context";
 import { ConflictError, NotFoundError } from "@/lib/db/mutations";
 import { InvalidMoneyError } from "@/lib/money";
 
+export class UnauthorizedError extends Error {
+  constructor(message = "Sign in required") {
+    super(message);
+    this.name = "UnauthorizedError";
+  }
+}
+
 export function jsonError(status: number, error: string): NextResponse {
   return NextResponse.json({ error }, { status });
 }
 
 export async function requireContext(): Promise<PageContext> {
   const ctx = await getPageContext();
-  if (!ctx) throw new NotFoundError("No account exists yet");
+  if (!ctx) throw new UnauthorizedError();
   return ctx;
 }
 
@@ -32,6 +39,7 @@ export function handleApiError(error: unknown): NextResponse {
   if (error instanceof InvalidMoneyError || error instanceof RangeError) {
     return jsonError(400, error.message);
   }
+  if (error instanceof UnauthorizedError) return jsonError(401, error.message);
   if (error instanceof NotFoundError) return jsonError(404, error.message);
   if (error instanceof ConflictError) return jsonError(409, error.message);
   console.error(error);

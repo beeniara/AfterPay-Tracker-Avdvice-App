@@ -23,9 +23,19 @@ pnpm db:push
 pnpm dev
 ```
 
+## Signing in
+
+The first visit redirects to `/setup`, where you choose the email and password
+for the single account (an account created by the CSV importer is adopted).
+Sessions are opaque tokens stored hashed in the `sessions` table, 30 days,
+httpOnly cookie. Passkeys can be added under Settings → Security and used on
+the sign-in page. Passwords are hashed with scrypt from Node's `crypto`.
+
 ## Importing your order history
 
-Drop a CSV in `data/` (git-ignored) with the columns
+Settings → Import lets you upload a CSV, match its columns, preview the
+reconstructed orders and import them. The same thing from the command line —
+drop a CSV in `data/` (git-ignored) with the columns
 `Date, Merchant, Status, Channel, Order No, Order Amount, Amount Owing`, then:
 
 ```bash
@@ -51,7 +61,11 @@ pnpm lint
 pnpm typecheck
 pnpm test            # unit + DB integration tests (needs TEST_DATABASE_URL)
 pnpm test:coverage   # enforces 95% branch coverage on lib/money, lib/ledger
+pnpm test:e2e        # Playwright against TEST_DATABASE_URL (first: pnpm exec playwright install chromium)
+pnpm db:seed         # invented demo data for an empty database
 ```
+
+Settings → Export downloads everything as JSON.
 
 The ledger lives in `lib/ledger.ts`: money is integer minor units, every
 derived figure (owed, pending, true cost, status) is computed from the rows,

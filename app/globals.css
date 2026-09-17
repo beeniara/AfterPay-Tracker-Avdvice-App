@@ -68,6 +68,9 @@
 @theme {
   --color-*: initial;
 
+  /* Below this the rail becomes a bottom tab bar and tables stack. */
+  --breakpoint-rail: 900px;
+
   --text-hero: 34px;
   --text-hero--line-height: 1.1;
   --text-hero--letter-spacing: -0.02em;
@@ -204,6 +207,45 @@
   .data-table tr[data-overdue="true"] td:first-child {
     box-shadow: inset 3px 0 0 var(--color-danger);
     padding-left: 12px;
+  }
+
+  /* Phones: each row becomes a stacked card labelled by its header. */
+  @media (max-width: 899px) {
+    .data-table,
+    .data-table tbody {
+      display: block;
+    }
+    .data-table thead {
+      display: none;
+    }
+    .data-table tr {
+      display: block;
+      margin-bottom: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--color-line);
+      border-radius: var(--radius-chip);
+    }
+    .data-table tr[data-overdue="true"] {
+      border-left: 3px solid var(--color-danger);
+    }
+    .data-table tr[data-overdue="true"] td:first-child {
+      box-shadow: none;
+      padding-left: 0;
+    }
+    .data-table td {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 5px 0;
+      border-bottom: 0;
+    }
+    .data-table td[data-label]::before {
+      content: attr(data-label);
+      flex: none;
+      color: var(--color-ink-muted);
+      font-size: var(--text-caption);
+    }
   }
   .row-link::after {
     content: "";

@@ -8,7 +8,7 @@ export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type DbClient = Db | Tx;
 
 export function createDb(url: string = getEnv().DATABASE_URL, max = 10) {
-  const client = postgres(url, { max });
+  const client = postgres(url, { max, onnotice: () => {} });
   return drizzle({ client, schema });
 }
 

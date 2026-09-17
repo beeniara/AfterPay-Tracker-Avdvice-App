@@ -1,5 +1,4 @@
 import { eq } from "drizzle-orm";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { computeOrder } from "@/lib/ledger";
 import { createDb, type Db } from "./index";
@@ -16,7 +15,6 @@ describe.skipIf(!url)("orders.status cache", () => {
 
   beforeAll(async () => {
     db = createDb(url, 1);
-    await migrate(db, { migrationsFolder: "drizzle" });
 
     const [user] = await db
       .insert(users)

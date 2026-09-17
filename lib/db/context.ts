@@ -1,5 +1,6 @@
+import { redirect } from "next/navigation";
+import { currentUser } from "@/lib/auth/session";
 import { todayIso } from "@/lib/dates";
-import { getCurrentUser } from "./current-user";
 import { getDb, type Db } from "./index";
 import type { User } from "./schema";
 
@@ -11,7 +12,13 @@ export interface PageContext {
 
 export async function getPageContext(): Promise<PageContext | null> {
   const db = getDb();
-  const user = await getCurrentUser(db);
+  const user = await currentUser(db);
   if (!user) return null;
   return { db, user, today: todayIso(user.timeZone) };
+}
+
+export async function requirePageContext(): Promise<PageContext> {
+  const ctx = await getPageContext();
+  if (!ctx) redirect("/login");
+  return ctx;
 }

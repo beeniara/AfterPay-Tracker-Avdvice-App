@@ -5,7 +5,7 @@ export type ApiResult<T = unknown> =
 export async function sendJson<T = unknown>(
   method: "POST" | "PATCH" | "DELETE",
   url: string,
-  body?: Record<string, unknown>,
+  body?: object,
 ): Promise<ApiResult<T>> {
   let response: Response;
   try {

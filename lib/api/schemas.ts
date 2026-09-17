@@ -62,6 +62,37 @@ export const refundSchema = z.object({
 });
 export type RefundInput = z.infer<typeof refundSchema>;
 
+const email = z.email().trim().toLowerCase().max(200);
+const password = z.string().min(8, "Use at least 8 characters").max(200);
+
+export const loginSchema = z.object({ email, password: z.string().min(1) });
+
+export const setupSchema = z.object({
+  email,
+  name: optionalText(120),
+  password,
+});
+
+export const passwordChangeSchema = z.object({
+  currentPassword: z.string().optional(),
+  newPassword: password,
+});
+
+export const profileSchema = z
+  .object({
+    email,
+    name: optionalText(120),
+    currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, "Use a 3-letter currency code"),
+    timeZone: z
+      .string()
+      .trim()
+      .refine((tz) => Intl.supportedValuesOf("timeZone").includes(tz), "Unknown time zone"),
+  })
+  .partial();
+export type ProfileInput = z.infer<typeof profileSchema>;
+
+export const passkeyNameSchema = z.object({ name: optionalText(80) });
+
 export const providerSchema = z.object({
   name: text(120).min(1, "Name is required"),
   kind: z.enum(["bnpl", "store_finance", "loan", "other"]).default("bnpl"),

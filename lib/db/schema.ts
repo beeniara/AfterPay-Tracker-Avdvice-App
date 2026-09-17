@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   date,
   index,
   integer,
@@ -49,10 +50,47 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: timestamp("email_verified", { withTimezone: true }),
   image: text("image"),
+  passwordHash: text("password_hash"),
   currency: text("currency").notNull().default("NZD"),
   timeZone: text("time_zone").notNull().default("Pacific/Auckland"),
   createdAt: timestamps.createdAt,
 });
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    userAgent: text("user_agent"),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("sessions_user_idx").on(t.userId), index("sessions_expires_idx").on(t.expiresAt)],
+);
+
+export const passkeys = pgTable(
+  "passkeys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id").notNull().unique(),
+    publicKey: text("public_key").notNull(),
+    counter: integer("counter").notNull().default(0),
+    transports: text("transports"),
+    deviceType: text("device_type"),
+    backedUp: boolean("backed_up").notNull().default(false),
+    name: text("name"),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("passkeys_user_idx").on(t.userId)],
+);
 
 export const providers = pgTable(
   "providers",
@@ -177,6 +215,16 @@ export const refunds = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   providers: many(providers),
   orders: many(orders),
+  sessions: many(sessions),
+  passkeys: many(passkeys),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, { fields: [sessions.userId], references: [users.id] }),
+}));
+
+export const passkeysRelations = relations(passkeys, ({ one }) => ({
+  user: one(users, { fields: [passkeys.userId], references: [users.id] }),
 }));
 
 export const providersRelations = relations(providers, ({ one, many }) => ({
@@ -225,5 +273,7 @@ export type Instalment = typeof instalments.$inferSelect;
 export type Fee = typeof fees.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type Refund = typeof refunds.$inferSelect;
+export type Session = typeof sessions.$inferSelect;
+export type Passkey = typeof passkeys.$inferSelect;
 export type ProviderKind = Provider["kind"];
 export type OrderChannel = Order["channel"];

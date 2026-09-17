@@ -36,16 +36,16 @@ export function OrdersTable({ orders }: { orders: OrderWithLedger[] }) {
                   </span>
                 </span>
               </td>
-              <td><StatusBadge status={order.ledger.status} /></td>
-              <td className="whitespace-nowrap">{formatDate(order.purchasedAt)}</td>
-              <td className="whitespace-nowrap text-ink-secondary">
+              <td data-label="Status"><StatusBadge status={order.ledger.status} /></td>
+              <td data-label="Purchased" className="whitespace-nowrap">{formatDate(order.purchasedAt)}</td>
+              <td data-label="Order no." className="whitespace-nowrap text-ink-secondary">
                 {CHANNEL_LABEL[order.channel]}{order.reference ? ` #${order.reference}` : ""}
               </td>
-              <td className="text-right tabular-nums">{formatCents(order.totalAmountCents, order.currency)}</td>
-              <td className="text-right font-semibold tabular-nums">
+              <td data-label="Order amount" className="text-right tabular-nums">{formatCents(order.totalAmountCents, order.currency)}</td>
+              <td data-label="Owing" className="text-right font-semibold tabular-nums">
                 {formatCents(order.ledger.owedAmount, order.currency)}
               </td>
-              <td className="text-right">
+              <td className="text-right max-rail:hidden">
                 <ChevronRightIcon className="inline size-3.5 text-ink-subtle" />
               </td>
             </tr>
