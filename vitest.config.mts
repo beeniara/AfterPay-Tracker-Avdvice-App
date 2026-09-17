@@ -15,7 +15,7 @@ export default defineConfig({
     exclude: ["node_modules/**", ".next/**", "e2e/**"],
     coverage: {
       provider: "v8",
-      include: ["lib/money.ts", "lib/ledger.ts", "lib/dates.ts", "lib/csv.ts"],
+      include: ["lib/money.ts", "lib/ledger.ts", "lib/dates.ts", "lib/csv.ts", "lib/insights.ts"],
       reporter: ["text", "html"],
       thresholds: { branches: 95, lines: 95, functions: 95 },
     },

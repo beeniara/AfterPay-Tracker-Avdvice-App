@@ -1,5 +1,6 @@
 import type { OrderDetail, OrderWithLedger, Summary } from "@/lib/db/queries";
 import type { Fee, Payment, Refund } from "@/lib/db/schema";
+import type { Insights } from "@/lib/insights";
 import type { LedgerInstalment } from "@/lib/ledger";
 import { toMoney, type Money } from "@/lib/money";
 
@@ -94,5 +95,41 @@ export function serializeSummary(summary: Summary) {
     activeOrders: summary.activeOrders,
     totalOrders: summary.totalOrders,
     byProviderKind: summary.byProviderKind.map((k) => ({ ...k, total: m(k.total) })),
+  };
+}
+
+export function serializeInsights(insights: Insights, currency: string) {
+  const m = (cents: number): Money => toMoney(cents, currency);
+  const window = (w: { count: number; total: number }) => ({ count: w.count, total: m(w.total) });
+  return {
+    owed: m(insights.owed),
+    owedWithoutPending: m(insights.owedWithoutPending),
+    pending: m(insights.pending),
+    overdue: m(insights.overdue),
+    overdueCount: insights.overdueCount,
+    activeOrders: insights.activeOrders,
+    settledOrders: insights.settledOrders,
+    totalOrders: insights.totalOrders,
+    purchased: m(insights.purchased),
+    paid: m(insights.paid),
+    fees: {
+      total: m(insights.fees.total),
+      late: m(insights.fees.late),
+      establishment: m(insights.fees.establishment),
+      other: m(insights.fees.other),
+      waived: m(insights.fees.waived),
+      onActive: m(insights.fees.onActive),
+    },
+    feeRate: insights.feeRate,
+    clearBy: insights.clearBy,
+    months: insights.months.map((x) => ({ ...x, total: m(x.total) })),
+    providers: insights.providers.map((p) => ({
+      ...p,
+      owed: m(p.owed),
+      fees: m(p.fees),
+      lateFees: m(p.lateFees),
+    })),
+    trend: { recent: window(insights.trend.recent), prior: window(insights.trend.prior) },
+    advice: insights.advice,
   };
 }

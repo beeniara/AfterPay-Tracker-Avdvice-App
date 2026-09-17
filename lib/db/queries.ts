@@ -209,6 +209,18 @@ export async function loadActiveOrders(
   return active.map((row) => withLedger(row, today));
 }
 
+export async function loadAllOrders(
+  db: DbClient,
+  userId: string,
+  today: string = todayIso(),
+): Promise<OrderWithLedger[]> {
+  const rows = await db.query.orders.findMany({
+    where: eq(orders.userId, userId),
+    with: { provider: true, instalments: { with: { fees: true } }, refunds: true },
+  });
+  return rows.map((row) => withLedger(row, today));
+}
+
 export interface ProviderStats {
   provider: Provider;
   activeOrders: number;

@@ -47,6 +47,6 @@ export function handleApiError(error: unknown): NextResponse {
 }
 
 export function revalidateMoneyPaths(orderId?: string): void {
-  for (const path of ["/", "/orders", "/upcoming", "/providers"]) revalidatePath(path);
+  for (const path of ["/", "/orders", "/upcoming", "/insights", "/providers"]) revalidatePath(path);
   if (orderId) revalidatePath(`/orders/${orderId}`);
 }

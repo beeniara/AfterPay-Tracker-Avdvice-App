@@ -6,6 +6,7 @@ import { SignOutButton } from "@/components/auth/sign-out-button";
 import {
   CalendarIcon,
   HomeIcon,
+  InsightsIcon,
   OrdersIcon,
   ProvidersIcon,
   SettingsIcon,
@@ -16,6 +17,7 @@ const items = [
   { href: "/", label: "Dashboard", Icon: HomeIcon },
   { href: "/orders", label: "Orders", Icon: OrdersIcon },
   { href: "/upcoming", label: "Upcoming", Icon: CalendarIcon },
+  { href: "/insights", label: "Insights", Icon: InsightsIcon },
   { href: "/providers", label: "Providers", Icon: ProvidersIcon },
   { href: "/settings", label: "Settings", Icon: SettingsIcon },
 ] as const;
@@ -65,7 +67,7 @@ export function Rail({ userName }: { userName: string }) {
         aria-label="Primary"
         className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur rail:hidden"
       >
-        <ul className="grid grid-cols-5">
+        <ul className="grid grid-cols-6">
           {items.map(({ href, label, Icon }) => {
             const active = isActive(pathname, href);
             return (
