@@ -130,6 +130,33 @@ export function serializeInsights(insights: Insights, currency: string) {
       lateFees: m(p.lateFees),
     })),
     trend: { recent: window(insights.trend.recent), prior: window(insights.trend.prior) },
+    biggestOrders: insights.biggestOrders.map((o) => ({
+      ...o,
+      total: m(o.total),
+      trueCost: m(o.trueCost),
+      owed: m(o.owed),
+    })),
+    merchants: insights.merchants.map((x) => ({
+      ...x,
+      spent: m(x.spent),
+      fees: m(x.fees),
+      lateFees: m(x.lateFees),
+    })),
+    history: insights.history.map((x) => ({ ...x, total: m(x.total) })),
+    averageOrder: m(insights.averageOrder),
+    refunded: m(insights.refunded),
+    refundedOrders: insights.refundedOrders,
+    channels: { online: window(insights.channels.online), inStore: window(insights.channels.inStore) },
+    habits: {
+      ...insights.habits,
+      spendPerWeek: m(insights.habits.spendPerWeek),
+      projectedYear: m(insights.habits.projectedYear),
+      busiestDay: insights.habits.busiestDay
+        ? { ...insights.habits.busiestDay, total: m(insights.habits.busiestDay.total) }
+        : null,
+      lastYear: window(insights.habits.lastYear),
+      priorYear: window(insights.habits.priorYear),
+    },
     advice: insights.advice,
   };
 }
