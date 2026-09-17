@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const envSchema = z.object({
   DATABASE_URL: z.url(),
+  TEST_DATABASE_URL: z.url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -26,6 +26,9 @@ npm-debug.log*
 .env*
 !.env.example
 
+# personal data dropped in for import
+/data
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

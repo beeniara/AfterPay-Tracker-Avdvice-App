@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
@@ -13,9 +14,9 @@ export default defineConfig({
     exclude: ["node_modules/**", ".next/**", "e2e/**"],
     coverage: {
       provider: "v8",
-      include: ["lib/**/*.ts"],
-      exclude: ["lib/**/*.test.ts", "lib/db/**"],
+      include: ["lib/money.ts", "lib/ledger.ts", "lib/dates.ts", "lib/csv.ts"],
       reporter: ["text", "html"],
+      thresholds: { branches: 95, lines: 95, functions: 95 },
     },
   },
 });

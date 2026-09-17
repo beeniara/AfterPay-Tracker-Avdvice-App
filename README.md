@@ -23,10 +23,30 @@ pnpm db:push
 pnpm dev
 ```
 
+## Importing your order history
+
+Drop a CSV in `data/` (git-ignored) with the columns
+`Date, Merchant, Status, Channel, Order No, Order Amount, Amount Owing`, then:
+
+```bash
+pnpm import:csv --file data/orders.csv --provider "My provider" --dry-run
+pnpm import:csv --file data/orders.csv --provider "My provider"
+```
+
+The importer rebuilds each order's pay-in-4 schedule (fortnightly from the
+purchase date, last instalment absorbs rounding), allocates what has been paid
+in order, and refuses any row whose reconstructed balance doesn't match the
+CSV. Re-running skips orders already present by order number.
+
 ## Checks
 
 ```bash
 pnpm lint
 pnpm typecheck
-pnpm test
+pnpm test            # unit + DB integration tests (needs TEST_DATABASE_URL)
+pnpm test:coverage   # enforces 95% branch coverage on lib/money, lib/ledger
 ```
+
+The ledger lives in `lib/ledger.ts`: money is integer minor units, every
+derived figure (owed, pending, true cost, status) is computed from the rows,
+and `orders.status` is only a cache written by `refreshOrderStatus`.

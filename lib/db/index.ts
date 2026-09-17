@@ -4,9 +4,11 @@ import { getEnv } from "@/lib/env";
 import * as schema from "./schema";
 
 export type Db = ReturnType<typeof createDb>;
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+export type DbClient = Db | Tx;
 
-function createDb() {
-  const client = postgres(getEnv().DATABASE_URL, { max: 10 });
+export function createDb(url: string = getEnv().DATABASE_URL, max = 10) {
+  const client = postgres(url, { max });
   return drizzle({ client, schema });
 }
 
