@@ -19,6 +19,8 @@ const eslintConfig = [
       "build/**",
       "coverage/**",
       "drizzle/**",
+      // Plain CommonJS helper container, not part of the Next.js app.
+      "wol-sidecar/**",
       "playwright-report/**",
       "test-results/**",
       "next-env.d.ts",

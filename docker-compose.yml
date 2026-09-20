@@ -8,6 +8,11 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
       OLLAMA_URL: ${OLLAMA_URL:-}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      # Wake-on-LAN for the Ollama PC: the app only asks the "wol" sidecar below.
+      PC_MAC_ADDRESS: ${PC_MAC_ADDRESS:-}
+      WOL_SPOOL_DIR: /spool
+      WAKE_ALLOWED_EMAILS: ${WAKE_ALLOWED_EMAILS:-}
+      WAKE_WINDOW_SECONDS: ${WAKE_WINDOW_SECONDS:-180}
     ports:
       - "${APP_PORT:-127.0.0.1:8091}:80"
     depends_on:
@@ -23,6 +28,31 @@ services:
       - app-network
     volumes:
       - ./public:/app/public:ro
+      - wol_spool:/spool
+
+  # Sends the Wake-on-LAN broadcast. Needs the host's network stack because a
+  # bridge-network container can't broadcast onto the physical LAN. It opens no
+  # port: the app talks to it through the wol_spool volume.
+  wol:
+    build:
+      context: ./wol-sidecar
+    restart: unless-stopped
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      PC_MAC_ADDRESS: ${PC_MAC_ADDRESS:-}
+      WOL_BROADCAST: ${WOL_BROADCAST:-192.168.1.255}
+      WOL_SPOOL_DIR: /spool
+    volumes:
+      - wol_spool:/spool
+    healthcheck:
+      test: ["CMD-SHELL", "test $$(( $$(date +%s) - $$(stat -c %Y /spool/wol.heartbeat) )) -lt 10"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   db:
     image: postgres:16-alpine
@@ -50,3 +80,4 @@ networks:
 
 volumes:
   owing-pgdata:
+  wol_spool:

@@ -1,4 +1,4 @@
-const STATUS_TIMEOUT_MS = 4_000;
+const STATUS_TIMEOUT_MS = 3_000;
 const CHAT_TIMEOUT_MS = 120_000;
 
 export type ModelStatus =

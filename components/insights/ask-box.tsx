@@ -36,6 +36,12 @@ interface History {
   shared: string[];
 }
 
+// GET /api/ask returns the model status plus wake info (see the route).
+type StatusResponse = ModelStatus & { canWake?: boolean; waking?: boolean };
+
+const WAKE_POLL_MS = 5_000;
+const WAKE_GIVE_UP_MS = 2 * 60 * 1000;
+
 const EXAMPLES = [
   "How much did I spend at each shop this year?",
   "Which orders still have more than two payments left?",
@@ -156,6 +162,10 @@ function ResultCard({ answer, note, sql, table, currency }: { answer: string; no
 
 export function AskBox({ currency }: { currency: string }) {
   const [status, setStatus] = useState<ModelStatus | "checking">("checking");
+  const [waking, setWaking] = useState(false);
+  const [wakeBusy, setWakeBusy] = useState(false);
+  const [wakeMessage, setWakeMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,14 +173,21 @@ export function AskBox({ currency }: { currency: string }) {
   const [history, setHistory] = useState<History>({ mine: [], shared: [] });
   const [open, setOpen] = useState<string | null>(null);
 
-  const check = useCallback(async () => {
-    setStatus("checking");
+  // quiet = background poll: don't flip the badge back to "Checking…".
+  const check = useCallback(async (quiet = false): Promise<StatusResponse> => {
+    if (!quiet) setStatus("checking");
+    let next: StatusResponse;
     try {
       const response = await fetch("/api/ask");
-      setStatus(response.ok ? ((await response.json()) as ModelStatus) : { state: "unreachable", host: "server", reason: `HTTP ${response.status}` });
+      next = response.ok ? ((await response.json()) as StatusResponse) : { state: "unreachable", host: "server", reason: `HTTP ${response.status}` };
     } catch {
-      setStatus({ state: "unreachable", host: "server", reason: "network error" });
+      next = { state: "unreachable", host: "server", reason: "network error" };
     }
+    setStatus(next);
+    // A page loaded mid-boot (or after a reload) resumes the waking view.
+    if (next.state === "unreachable" && next.waking) setWaking(true);
+    if (next.state !== "unreachable") setWaking(false);
+    return next;
   }, []);
 
   const loadHistory = useCallback(async () => {
@@ -186,6 +203,43 @@ export function AskBox({ currency }: { currency: string }) {
     void check();
     void loadHistory();
   }, [check, loadHistory]);
+
+  // After a wake signal, poll every 5s until the model answers, or give up after 2 minutes.
+  useEffect(() => {
+    if (!waking) return;
+    const startedAt = Date.now();
+    const timer = setInterval(async () => {
+      const next = await check(true);
+      if (next.state !== "unreachable") {
+        setWakeMessage(null);
+      } else if (Date.now() - startedAt > WAKE_GIVE_UP_MS) {
+        setWaking(false);
+        setWakeMessage("The computer didn't come online. Check that it is plugged in and Wake-on-LAN is enabled.");
+      }
+    }, WAKE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [waking, check]);
+
+  async function checkAgain() {
+    setNotice(null);
+    setWakeMessage(null);
+    const next = await check();
+    if (next.state === "unreachable") setNotice(`Still offline (checked ${new Date().toLocaleTimeString()}).`);
+  }
+
+  async function startAi() {
+    setWakeBusy(true);
+    setWakeMessage(null);
+    setNotice(null);
+    const res = await sendJson("POST", "/api/ask/wake");
+    setWakeBusy(false);
+    if (!res.ok) {
+      setWakeMessage(res.error);
+      return;
+    }
+    if (status !== "checking" && status.state === "unreachable") setWaking(true);
+    else setWakeMessage("Wake signal sent.");
+  }
 
   async function submit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -231,17 +285,31 @@ export function AskBox({ currency }: { currency: string }) {
           <Badge tone="neutral">Checking your PC…</Badge>
         ) : status.state === "ready" ? (
           <Badge tone="success">Ready · {status.model}</Badge>
+        ) : waking ? (
+          <Badge tone="neutral">Waking up…</Badge>
         ) : (
           <Badge tone="warning">Not available</Badge>
         )}
+        {status !== "checking" && status.state === "ready" ? <span className="text-caption text-ink-muted">● AI is online</span> : null}
+        {!waking ? (
+          <Button variant="ghost" onClick={() => void startAi()} disabled={wakeBusy}>
+            Start-Beeniara-Ai
+          </Button>
+        ) : null}
         {status !== "checking" && status.state !== "ready" ? (
-          <Button variant="ghost" className="ml-auto" onClick={() => void check()}>
+          <Button variant="ghost" className="ml-auto" onClick={() => void checkAgain()} disabled={waking}>
             Check again
           </Button>
         ) : null}
       </div>
 
-      {status !== "checking" && status.state !== "ready" ? <Guidance status={status} /> : null}
+      {waking ? (
+        <p className="mb-3 text-body text-ink-secondary">Wake signal sent. Waiting for the computer to start up, this can take a minute or two…</p>
+      ) : null}
+      {wakeMessage ? <p className="mb-3 text-caption text-ink-muted">{wakeMessage}</p> : null}
+      {notice && !wakeMessage ? <p className="mb-3 text-caption text-ink-muted">{notice}</p> : null}
+
+      {status !== "checking" && status.state !== "ready" && !waking ? <Guidance status={status} /> : null}
 
       {ready ? (
         <form onSubmit={submit} className="grid gap-3">

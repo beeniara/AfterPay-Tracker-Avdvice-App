@@ -32,4 +32,6 @@ ENV PORT=80
 
 EXPOSE 80
 
-CMD ["pnpm", "start"]
+# The wol_spool volume is created root-owned; open it so the sidecar's non-root
+# user can write its heartbeat. Harmless when no spool is mounted.
+CMD ["sh", "-c", "[ -d /spool ] && chmod 777 /spool; exec pnpm start"]

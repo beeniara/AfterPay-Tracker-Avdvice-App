@@ -4,6 +4,7 @@ import { handleApiError, jsonError, parseBody, readJson, requireContext } from "
 import { UnsafeSqlError } from "@/lib/ask/guard";
 import { modelStatus, ModelUnreachableError } from "@/lib/ask/ollama";
 import { ask } from "@/lib/ask/run";
+import { isWolConfigured, mayWake, prepareSpool, recentlyWoken } from "@/lib/ask/wol";
 import { recordAsk } from "@/lib/db/ask-history";
 import { getEnv } from "@/lib/env";
 
@@ -37,10 +38,19 @@ function describeFailure(error: unknown): { status: number; message: string } | 
   return null;
 }
 
+// The model status (unchanged shape) plus wake info: canWake = this account may
+// press Start-Beeniara-Ai; waking = the PC is unreachable but a wake signal went
+// out recently, so it is probably still booting.
 export async function GET() {
   try {
-    await requireContext();
-    return NextResponse.json(await modelStatus(config()));
+    const { user } = await requireContext();
+    if (isWolConfigured()) prepareSpool();
+    const status = await modelStatus(config());
+    return NextResponse.json({
+      ...status,
+      canWake: mayWake(user.email),
+      waking: status.state === "unreachable" && recentlyWoken(),
+    });
   } catch (error) {
     return handleApiError(error);
   }
