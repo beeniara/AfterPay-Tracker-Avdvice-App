@@ -49,6 +49,9 @@ const SHUTDOWN_GRACE_S = 10;
 // The PC's locked SSH key runs `shutdown /s /t 5`, so it goes off about 5s after we send.
 const SHUTDOWN_PC_DELAY_S = 5;
 
+const WELCOME = "Assistance Beeniara is with you and ready to assist with anything on your mind today. Enjoy, and have a good day.";
+const COMING_SOON = "Assistance Beeniara will be with you soon.";
+
 type ShutdownState = { phase: "pending" | "sending" | "off"; left: number } | null;
 
 const EXAMPLES = [
@@ -298,8 +301,8 @@ export function AskBox({ currency }: { currency: string }) {
       if (timed) {
         const report = describeWake(timed.seconds, timed.previous);
         setWakeReport(report);
-        say(`Assistance Beeniara is online and available. ${report}`);
-      } else say("Assistance Beeniara is online and available.");
+        say(`Assistance Beeniara is online. ${report} ${WELCOME}`);
+      } else say(`Assistance Beeniara is online. ${WELCOME}`);
     }
     else if (!now.on && before.on) say("The PC is now off.");
   }, [status, say]);
@@ -358,7 +361,7 @@ export function AskBox({ currency }: { currency: string }) {
       setElapsed(0);
       setWakeReport(null);
       setWaking(true);
-      say("Wake signal sent. Assistance Beeniara will be online soon.");
+      say(`Wake signal sent. ${COMING_SOON}`);
     } else setWakeMessage("Wake signal sent.");
   }
 
@@ -497,7 +500,7 @@ export function AskBox({ currency }: { currency: string }) {
 
         {waking ? (
           <div className="grid gap-1 text-body text-ink-secondary">
-            <p>Wake signal sent. Waiting for the computer to start up, this can take a minute or two…</p>
+            <p>Wake signal sent. {COMING_SOON} The computer is starting up, which can take a minute or two.</p>
             {wakeStart !== null ? (
               <p className="flex flex-wrap items-baseline gap-x-3 tabular-nums">
                 <span className="text-heading font-semibold text-ink">
@@ -510,7 +513,11 @@ export function AskBox({ currency }: { currency: string }) {
             ) : null}
           </div>
         ) : null}
-        {wakeReport && !waking ? <p className="text-body text-ink-secondary">{wakeReport}</p> : null}
+        {wakeReport && !waking ? (
+          <p className="text-body text-ink-secondary">
+            {WELCOME} {wakeReport}
+          </p>
+        ) : null}
         {shutdown ? (
           <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-chip bg-surface px-3 py-2 text-body text-ink-secondary">
             {shutdown.phase === "pending" ? (
