@@ -338,7 +338,7 @@ export function AskBox({ currency }: { currency: string }) {
           <Badge tone="warning">Not available</Badge>
         )}
         {status !== "checking" && status.state === "ready" ? <span className="text-caption text-ink-muted">● AI is online</span> : null}
-        {!waking ? (
+        {!waking && status !== "checking" && (status.state === "unreachable" || status.state === "unconfigured") ? (
           <Button variant="ghost" onClick={() => void startAi()} disabled={wakeBusy}>
             Start-Beeniara-Ai
           </Button>
