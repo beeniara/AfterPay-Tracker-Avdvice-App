@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { sendJson } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
+import { clearWakeTimer, DEFAULT_ESTIMATE_S, describeWake, finishWakeTimer, lastWakeSeconds, pendingWakeStart, startWakeTimer } from "@/lib/client/wake-timing";
 import { readMuted, speak, speechSupported, stopSpeaking, writeMuted } from "@/lib/client/speak";
 import type { ModelStatus } from "@/lib/ask/ollama";
 import { isMoneyColumn, type ResultTable } from "@/lib/ask/prompt";
@@ -177,6 +178,10 @@ export function AskBox({ currency }: { currency: string }) {
   const [wakeMessage, setWakeMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
+  const [wakeStart, setWakeStart] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [estimate, setEstimate] = useState(DEFAULT_ESTIMATE_S);
+  const [wakeReport, setWakeReport] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [canSpeak, setCanSpeak] = useState(false);
   const mutedRef = useRef(false);
@@ -203,7 +208,10 @@ export function AskBox({ currency }: { currency: string }) {
     setCheckedAt(new Date());
     setCanShutdown(Boolean(next.canShutdown));
     // A page loaded mid-boot (or after a reload) resumes the waking view.
-    if (next.state === "unreachable" && next.waking) setWaking(true);
+    if (next.state === "unreachable" && next.waking) {
+      setWaking(true);
+      setWakeStart((prev) => prev ?? pendingWakeStart(Date.now()) ?? Date.now());
+    }
     if (next.state !== "unreachable") setWaking(false);
     return next;
   }, []);
@@ -249,6 +257,8 @@ export function AskBox({ currency }: { currency: string }) {
     if (!waking) return;
     const timer = setTimeout(() => {
       setWaking(false);
+      setWakeStart(null);
+      clearWakeTimer();
       setWakeMessage("The computer didn't come online. Check that it is plugged in and Wake-on-LAN is enabled.");
     }, WAKE_GIVE_UP_MS);
     return () => clearTimeout(timer);
@@ -282,7 +292,15 @@ export function AskBox({ currency }: { currency: string }) {
     const before = seen.current;
     seen.current = now;
     if (!before) return;
-    if (now.ready && !before.ready) say("Beeniara AI is online and available.");
+    if (now.ready && !before.ready) {
+      const timed = finishWakeTimer(Date.now());
+      setWakeStart(null);
+      if (timed) {
+        const report = describeWake(timed.seconds, timed.previous);
+        setWakeReport(report);
+        say(`Assistance Beeniara is online and available. ${report}`);
+      } else say("Assistance Beeniara is online and available.");
+    }
     else if (!now.on && before.on) say("The PC is now off.");
   }, [status, say]);
 
@@ -296,6 +314,25 @@ export function AskBox({ currency }: { currency: string }) {
       if (shutdown.left === SHUTDOWN_PC_DELAY_S) say("Shutdown command sent. The PC is switching off.");
     }
   }, [shutdown, say]);
+
+  // While waking: tick a visible timer, counting down against how long the last start took.
+  useEffect(() => {
+    if (!waking || wakeStart === null) return;
+    setEstimate(lastWakeSeconds() ?? DEFAULT_ESTIMATE_S);
+    const tick = () => setElapsed(Math.floor((Date.now() - wakeStart) / 1000));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [waking, wakeStart]);
+
+  // Spoken: one line at 10 seconds to go, then the last ten seconds one by one.
+  const remaining = estimate - elapsed;
+  useEffect(() => {
+    if (!waking || wakeStart === null) return;
+    if (remaining === 10) say("Assistance Beeniara should be ready in 10 seconds.");
+    else if (remaining > 0 && remaining < 10) say(String(remaining));
+    else if (remaining === 0) say("Taking a little longer than last time. Still waiting.");
+  }, [remaining, waking, wakeStart, say]);
 
   async function checkAgain() {
     setNotice(null);
@@ -315,8 +352,13 @@ export function AskBox({ currency }: { currency: string }) {
       return;
     }
     if (status !== "checking" && status.state === "unreachable") {
+      const now = Date.now();
+      startWakeTimer(now);
+      setWakeStart(now);
+      setElapsed(0);
+      setWakeReport(null);
       setWaking(true);
-      say("Wake signal sent. Beeniara AI will be online soon.");
+      say("Wake signal sent. Assistance Beeniara will be online soon.");
     } else setWakeMessage("Wake signal sent.");
   }
 
@@ -424,7 +466,7 @@ export function AskBox({ currency }: { currency: string }) {
           />
           <div className="grid min-w-0 flex-1 gap-0.5">
             <span className="text-heading font-semibold">
-              {panelTone === "on" ? "Beeniara AI is ON" : panelTone === "off" ? "Beeniara AI is OFF" : panelTone === "waking" ? "Starting up…" : "Checking your PC…"}
+              {panelTone === "on" ? "Assistance Beeniara is ON" : panelTone === "off" ? "Assistance Beeniara is OFF" : panelTone === "waking" ? "Starting up…" : "Checking your PC…"}
             </span>
             <span className="text-caption text-ink-secondary">
               {status !== "checking" && status.state === "ready" ? `Ready · ${status.model}` : null}
@@ -453,7 +495,22 @@ export function AskBox({ currency }: { currency: string }) {
           ) : null}
         </div>
 
-        {waking ? <p className="text-body text-ink-secondary">Wake signal sent. Waiting for the computer to start up, this can take a minute or two…</p> : null}
+        {waking ? (
+          <div className="grid gap-1 text-body text-ink-secondary">
+            <p>Wake signal sent. Waiting for the computer to start up, this can take a minute or two…</p>
+            {wakeStart !== null ? (
+              <p className="flex flex-wrap items-baseline gap-x-3 tabular-nums">
+                <span className="text-heading font-semibold text-ink">
+                  {remaining > 0 ? `Ready in about ${remaining}s` : "Taking longer than last time…"}
+                </span>
+                <span className="text-caption">
+                  {elapsed}s so far · last start took {estimate === DEFAULT_ESTIMATE_S && lastWakeSeconds() === null ? "no record yet (guessing 45s)" : `${estimate}s`}
+                </span>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {wakeReport && !waking ? <p className="text-body text-ink-secondary">{wakeReport}</p> : null}
         {shutdown ? (
           <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-chip bg-surface px-3 py-2 text-body text-ink-secondary">
             {shutdown.phase === "pending" ? (
