@@ -37,10 +37,16 @@ interface History {
 }
 
 // GET /api/ask returns the model status plus wake info (see the route).
-type StatusResponse = ModelStatus & { canWake?: boolean; waking?: boolean };
+type StatusResponse = ModelStatus & { canWake?: boolean; canShutdown?: boolean; waking?: boolean };
 
 const WAKE_POLL_MS = 5_000;
 const WAKE_GIVE_UP_MS = 2 * 60 * 1000;
+// Seconds the user can still cancel after pressing "Shut down PC".
+const SHUTDOWN_GRACE_S = 10;
+// The PC's locked SSH key runs `shutdown /s /t 5`, so it goes off about 5s after we send.
+const SHUTDOWN_PC_DELAY_S = 5;
+
+type ShutdownState = { phase: "pending" | "sending" | "off"; left: number } | null;
 
 const EXAMPLES = [
   "How much did I spend at each shop this year?",
@@ -164,6 +170,8 @@ export function AskBox({ currency }: { currency: string }) {
   const [status, setStatus] = useState<ModelStatus | "checking">("checking");
   const [waking, setWaking] = useState(false);
   const [wakeBusy, setWakeBusy] = useState(false);
+  const [canShutdown, setCanShutdown] = useState(false);
+  const [shutdown, setShutdown] = useState<ShutdownState>(null);
   const [wakeMessage, setWakeMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
@@ -184,6 +192,7 @@ export function AskBox({ currency }: { currency: string }) {
       next = { state: "unreachable", host: "server", reason: "network error" };
     }
     setStatus(next);
+    setCanShutdown(Boolean(next.canShutdown));
     // A page loaded mid-boot (or after a reload) resumes the waking view.
     if (next.state === "unreachable" && next.waking) setWaking(true);
     if (next.state !== "unreachable") setWaking(false);
@@ -241,6 +250,44 @@ export function AskBox({ currency }: { currency: string }) {
     else setWakeMessage("Wake signal sent.");
   }
 
+  function startShutdown() {
+    setWakeMessage(null);
+    setNotice(null);
+    setShutdown({ phase: "pending", left: SHUTDOWN_GRACE_S });
+  }
+
+  function cancelShutdown() {
+    setShutdown(null);
+    setNotice("Shutdown cancelled.");
+  }
+
+  // One tick per second: the cancellable countdown runs out into the real
+  // request, then the "powering off" countdown runs out into a status re-check.
+  useEffect(() => {
+    if (!shutdown || shutdown.phase === "sending") return;
+    const timer = setTimeout(async () => {
+      if (shutdown.left > 1) {
+        setShutdown({ phase: shutdown.phase, left: shutdown.left - 1 });
+        return;
+      }
+      if (shutdown.phase === "off") {
+        setShutdown(null);
+        setWakeMessage("The computer should be off now.");
+        void check(true);
+        return;
+      }
+      setShutdown({ phase: "sending", left: 0 });
+      const res = await sendJson("POST", "/api/ask/shutdown");
+      if (!res.ok) {
+        setShutdown(null);
+        setWakeMessage(res.error);
+        return;
+      }
+      setShutdown({ phase: "off", left: SHUTDOWN_PC_DELAY_S });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [shutdown, check]);
+
   async function submit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (busy || question.trim().length < 3) return;
@@ -296,6 +343,11 @@ export function AskBox({ currency }: { currency: string }) {
             Start-Beeniara-Ai
           </Button>
         ) : null}
+        {canShutdown && !shutdown && status !== "checking" && status.state !== "unreachable" ? (
+          <Button variant="ghost" onClick={startShutdown}>
+            Shut down PC
+          </Button>
+        ) : null}
         {status !== "checking" && status.state !== "ready" ? (
           <Button variant="ghost" className="ml-auto" onClick={() => void checkAgain()} disabled={waking}>
             Check again
@@ -305,6 +357,26 @@ export function AskBox({ currency }: { currency: string }) {
 
       {waking ? (
         <p className="mb-3 text-body text-ink-secondary">Wake signal sent. Waiting for the computer to start up, this can take a minute or two…</p>
+      ) : null}
+      {shutdown ? (
+        <div role="status" aria-live="polite" className="mb-3 flex flex-wrap items-center gap-3 rounded-chip bg-surface-sunken px-3 py-2 text-body text-ink-secondary">
+          {shutdown.phase === "pending" ? (
+            <>
+              <span>
+                Shutting down the PC in <strong className="tabular-nums">{shutdown.left}s</strong>. Anything else running on it (including other apps&apos; AI) will stop.
+              </span>
+              <Button variant="ghost" onClick={cancelShutdown}>
+                Cancel
+              </Button>
+            </>
+          ) : shutdown.phase === "sending" ? (
+            <span>Sending the shutdown command…</span>
+          ) : (
+            <span>
+              Command sent. The PC switches off in <strong className="tabular-nums">{shutdown.left}s</strong>.
+            </span>
+          )}
+        </div>
       ) : null}
       {wakeMessage ? <p className="mb-3 text-caption text-ink-muted">{wakeMessage}</p> : null}
       {notice && !wakeMessage ? <p className="mb-3 text-caption text-ink-muted">{notice}</p> : null}

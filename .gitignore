@@ -32,3 +32,6 @@ npm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# SSH key for remote PC shutdown
+/wol-sidecar/ssh/

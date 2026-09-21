@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetEnvCache } from "@/lib/env";
-import { isWolConfigured, mayWake, recentlyWoken, resetWolState, sendWakePacket, takeWakeSlot } from "./wol";
+import { isShutdownConfigured, isWolConfigured, mayShutdown, mayWake, recentlyWoken, resetWolState, sendShutdown, sendWakePacket, takeShutdownSlot, takeWakeSlot } from "./wol";
 
 let dir: string;
 
@@ -96,5 +96,45 @@ describe("sendWakePacket", () => {
       clearInterval(responder);
     }
     expect(recentlyWoken()).toBe(false);
+  });
+});
+
+describe("remote shutdown", () => {
+  it("is off without PC_SSH_HOST, and only for the allow-list when on", () => {
+    expect(isShutdownConfigured()).toBe(false);
+    expect(mayShutdown("owner@example.com")).toBe(false);
+    vi.stubEnv("PC_SSH_HOST", "100.64.0.1");
+    resetEnvCache();
+    expect(isShutdownConfigured()).toBe(true);
+    expect(mayShutdown("owner@example.com")).toBe(true);
+    expect(mayShutdown("stranger@example.com")).toBe(false);
+  });
+
+  it("has its own rate limit, separate from waking", () => {
+    const t = 1_000_000;
+    expect([1, 2, 3, 4].map(() => takeShutdownSlot(t))).toEqual([true, true, true, false]);
+    expect(takeWakeSlot(t)).toBe(true);
+  });
+
+  it("clears the 'waking' state and surfaces sidecar errors", async () => {
+    const reply = { text: "ok" };
+    const responder = setInterval(async () => {
+      try {
+        await readFile(path.join(dir, "shutdown.req"));
+        await rm(path.join(dir, "shutdown.req"), { force: true });
+        await writeFile(path.join(dir, "shutdown.res"), reply.text);
+      } catch {
+        // no request yet
+      }
+    }, 50);
+    try {
+      await writeFile(path.join(dir, "wake.res"), "ok");
+      await sendShutdown();
+      expect(recentlyWoken()).toBe(false);
+      reply.text = "error: Permission denied";
+      await expect(sendShutdown()).rejects.toThrow(/Permission denied/);
+    } finally {
+      clearInterval(responder);
+    }
   });
 });

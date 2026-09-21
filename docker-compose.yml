@@ -11,6 +11,7 @@ services:
       # Wake-on-LAN for the Ollama PC: the app only asks the "wol" sidecar below.
       PC_MAC_ADDRESS: ${PC_MAC_ADDRESS:-}
       WOL_SPOOL_DIR: /spool
+      PC_SSH_HOST: ${PC_SSH_HOST:-}
       WAKE_ALLOWED_EMAILS: ${WAKE_ALLOWED_EMAILS:-}
       WAKE_WINDOW_SECONDS: ${WAKE_WINDOW_SECONDS:-180}
     ports:
@@ -30,7 +31,7 @@ services:
       - ./public:/app/public:ro
       - wol_spool:/spool
 
-  # Sends the Wake-on-LAN broadcast. Needs the host's network stack because a
+  # Sends the Wake-on-LAN broadcast (and the SSH shutdown command). Needs the host's network stack because a
   # bridge-network container can't broadcast onto the physical LAN. It opens no
   # port: the app talks to it through the wol_spool volume.
   wol:
@@ -46,8 +47,13 @@ services:
       PC_MAC_ADDRESS: ${PC_MAC_ADDRESS:-}
       WOL_BROADCAST: ${WOL_BROADCAST:-192.168.1.255}
       WOL_SPOOL_DIR: /spool
+      PC_SSH_HOST: ${PC_SSH_HOST:-}
+      PC_SSH_USER: ${PC_SSH_USER:-}
     volumes:
       - wol_spool:/spool
+      # id_ed25519 (+ known_hosts, written on first connect) for remote shutdown.
+      # Local only, never committed.
+      - ${PC_SSH_DIR:-./wol-sidecar/ssh}:/ssh
     healthcheck:
       test: ["CMD-SHELL", "test $$(( $$(date +%s) - $$(stat -c %Y /spool/wol.heartbeat) )) -lt 10"]
       interval: 15s

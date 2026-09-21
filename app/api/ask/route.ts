@@ -4,7 +4,7 @@ import { handleApiError, jsonError, parseBody, readJson, requireContext } from "
 import { UnsafeSqlError } from "@/lib/ask/guard";
 import { modelStatus, ModelUnreachableError } from "@/lib/ask/ollama";
 import { ask } from "@/lib/ask/run";
-import { isWolConfigured, mayWake, prepareSpool, recentlyWoken } from "@/lib/ask/wol";
+import { isWolConfigured, mayShutdown, mayWake, prepareSpool, recentlyWoken } from "@/lib/ask/wol";
 import { recordAsk } from "@/lib/db/ask-history";
 import { getEnv } from "@/lib/env";
 
@@ -49,6 +49,7 @@ export async function GET() {
     return NextResponse.json({
       ...status,
       canWake: mayWake(user.email),
+      canShutdown: mayShutdown(user.email),
       waking: status.state === "unreachable" && recentlyWoken(),
     });
   } catch (error) {

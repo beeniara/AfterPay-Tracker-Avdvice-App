@@ -23,6 +23,9 @@ const envSchema = z.object({
         : [],
     z.array(z.string()),
   ),
+  // Remote shutdown over SSH (done by the same sidecar). Blank host disables it.
+  // Only WAKE_ALLOWED_EMAILS may use it.
+  PC_SSH_HOST: z.preprocess(blankToUndefined, z.string().min(1).optional()),
   // How long after a wake an unreachable PC counts as "waking" (boot takes ~30-90s).
   WAKE_WINDOW_SECONDS: z.preprocess(blankToUndefined, z.coerce.number().int().positive().default(180)),
 });
