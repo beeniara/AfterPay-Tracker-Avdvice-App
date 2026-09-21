@@ -282,7 +282,7 @@ export function AskBox({ currency }: { currency: string }) {
     const before = seen.current;
     seen.current = now;
     if (!before) return;
-    if (now.ready && !before.ready) say("The AI is online and available.");
+    if (now.ready && !before.ready) say("Beeniara AI is online and available.");
     else if (!now.on && before.on) say("The PC is now off.");
   }, [status, say]);
 
@@ -316,7 +316,7 @@ export function AskBox({ currency }: { currency: string }) {
     }
     if (status !== "checking" && status.state === "unreachable") {
       setWaking(true);
-      say("Wake signal sent. The AI will be online soon.");
+      say("Wake signal sent. Beeniara AI will be online soon.");
     } else setWakeMessage("Wake signal sent.");
   }
 
@@ -424,7 +424,7 @@ export function AskBox({ currency }: { currency: string }) {
           />
           <div className="grid min-w-0 flex-1 gap-0.5">
             <span className="text-heading font-semibold">
-              {panelTone === "on" ? "AI computer is ON" : panelTone === "off" ? "AI computer is OFF" : panelTone === "waking" ? "Starting up…" : "Checking your PC…"}
+              {panelTone === "on" ? "Beeniara AI is ON" : panelTone === "off" ? "Beeniara AI is OFF" : panelTone === "waking" ? "Starting up…" : "Checking your PC…"}
             </span>
             <span className="text-caption text-ink-secondary">
               {status !== "checking" && status.state === "ready" ? `Ready · ${status.model}` : null}
