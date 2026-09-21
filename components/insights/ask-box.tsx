@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { sendJson } from "@/lib/client/api";
+import { cn } from "@/lib/cn";
 import type { ModelStatus } from "@/lib/ask/ollama";
 import { isMoneyColumn, type ResultTable } from "@/lib/ask/prompt";
 import { formatCents, formatDate } from "@/lib/format";
@@ -39,7 +39,8 @@ interface History {
 // GET /api/ask returns the model status plus wake info (see the route).
 type StatusResponse = ModelStatus & { canWake?: boolean; canShutdown?: boolean; waking?: boolean };
 
-const WAKE_POLL_MS = 5_000;
+// The panel re-checks the PC on its own this often, so it follows the PC on/off without a click.
+const LIVE_POLL_MS = 5_000;
 const WAKE_GIVE_UP_MS = 2 * 60 * 1000;
 // Seconds the user can still cancel after pressing "Shut down PC".
 const SHUTDOWN_GRACE_S = 10;
@@ -174,6 +175,7 @@ export function AskBox({ currency }: { currency: string }) {
   const [shutdown, setShutdown] = useState<ShutdownState>(null);
   const [wakeMessage, setWakeMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -192,6 +194,7 @@ export function AskBox({ currency }: { currency: string }) {
       next = { state: "unreachable", host: "server", reason: "network error" };
     }
     setStatus(next);
+    setCheckedAt(new Date());
     setCanShutdown(Boolean(next.canShutdown));
     // A page loaded mid-boot (or after a reload) resumes the waking view.
     if (next.state === "unreachable" && next.waking) setWaking(true);
@@ -213,21 +216,37 @@ export function AskBox({ currency }: { currency: string }) {
     void loadHistory();
   }, [check, loadHistory]);
 
-  // After a wake signal, poll every 5s until the model answers, or give up after 2 minutes.
+  // Live status: keep re-checking while the tab is visible, and check straight away
+  // when the user comes back to it. Skips a tick if the last request is still running.
+  useEffect(() => {
+    let inFlight = false;
+    const tick = async () => {
+      if (inFlight || document.visibilityState !== "visible") return;
+      inFlight = true;
+      try {
+        await check(true);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(() => void tick(), LIVE_POLL_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [check]);
+
+  // After a wake signal the live poll above notices the PC coming up (check() clears
+  // `waking`); this only gives up after 2 minutes.
   useEffect(() => {
     if (!waking) return;
-    const startedAt = Date.now();
-    const timer = setInterval(async () => {
-      const next = await check(true);
-      if (next.state !== "unreachable") {
-        setWakeMessage(null);
-      } else if (Date.now() - startedAt > WAKE_GIVE_UP_MS) {
-        setWaking(false);
-        setWakeMessage("The computer didn't come online. Check that it is plugged in and Wake-on-LAN is enabled.");
-      }
-    }, WAKE_POLL_MS);
-    return () => clearInterval(timer);
-  }, [waking, check]);
+    const timer = setTimeout(() => {
+      setWaking(false);
+      setWakeMessage("The computer didn't come online. Check that it is plugged in and Wake-on-LAN is enabled.");
+    }, WAKE_GIVE_UP_MS);
+    return () => clearTimeout(timer);
+  }, [waking]);
 
   async function checkAgain() {
     setNotice(null);
@@ -319,6 +338,9 @@ export function AskBox({ currency }: { currency: string }) {
   }
 
   const ready = status !== "checking" && status.state === "ready";
+  // The PC counts as "on" whenever Ollama answers (even with a model problem); "unconfigured" has nothing to reach.
+  const pcOn = status !== "checking" && status.state !== "unreachable" && status.state !== "unconfigured";
+  const panelTone = status === "checking" ? "checking" : pcOn ? "on" : waking ? "waking" : "off";
   const pick = (q: string) => {
     setQuestion(q);
     setResult(null);
@@ -327,59 +349,77 @@ export function AskBox({ currency }: { currency: string }) {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {status === "checking" ? (
-          <Badge tone="neutral">Checking your PC…</Badge>
-        ) : status.state === "ready" ? (
-          <Badge tone="success">Ready · {status.model}</Badge>
-        ) : waking ? (
-          <Badge tone="neutral">Waking up…</Badge>
-        ) : (
-          <Badge tone="warning">Not available</Badge>
+      <section
+        aria-label="AI computer"
+        className={cn(
+          "mb-4 grid gap-3 rounded-card border-2 p-4 shadow-sm transition-colors",
+          panelTone === "on" && "border-success bg-success-tint",
+          panelTone === "off" && "border-danger bg-danger-tint",
+          panelTone === "waking" && "border-warning bg-warning-tint",
+          panelTone === "checking" && "border-line bg-surface-sunken",
         )}
-        {status !== "checking" && status.state === "ready" ? <span className="text-caption text-ink-muted">● AI is online</span> : null}
-        {!waking && status !== "checking" && (status.state === "unreachable" || status.state === "unconfigured") ? (
-          <Button variant="ghost" onClick={() => void startAi()} disabled={wakeBusy}>
-            Start-Beeniara-Ai
-          </Button>
-        ) : null}
-        {canShutdown && !shutdown && status !== "checking" && status.state !== "unreachable" ? (
-          <Button variant="ghost" onClick={startShutdown}>
-            Shut down PC
-          </Button>
-        ) : null}
-        {status !== "checking" && status.state !== "ready" ? (
-          <Button variant="ghost" className="ml-auto" onClick={() => void checkAgain()} disabled={waking}>
-            Check again
-          </Button>
-        ) : null}
-      </div>
-
-      {waking ? (
-        <p className="mb-3 text-body text-ink-secondary">Wake signal sent. Waiting for the computer to start up, this can take a minute or two…</p>
-      ) : null}
-      {shutdown ? (
-        <div role="status" aria-live="polite" className="mb-3 flex flex-wrap items-center gap-3 rounded-chip bg-surface-sunken px-3 py-2 text-body text-ink-secondary">
-          {shutdown.phase === "pending" ? (
-            <>
-              <span>
-                Shutting down the PC in <strong className="tabular-nums">{shutdown.left}s</strong>. Anything else running on it (including other apps&apos; AI) will stop.
-              </span>
-              <Button variant="ghost" onClick={cancelShutdown}>
-                Cancel
-              </Button>
-            </>
-          ) : shutdown.phase === "sending" ? (
-            <span>Sending the shutdown command…</span>
-          ) : (
-            <span>
-              Command sent. The PC switches off in <strong className="tabular-nums">{shutdown.left}s</strong>.
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <span
+            aria-hidden
+            className={cn(
+              "h-3 w-3 shrink-0 rounded-full",
+              panelTone === "on" && "bg-success",
+              panelTone === "off" && "bg-danger",
+              panelTone === "waking" && "animate-pulse bg-warning",
+              panelTone === "checking" && "animate-pulse bg-ink-subtle",
+            )}
+          />
+          <div className="grid min-w-0 flex-1 gap-0.5">
+            <span className="text-heading font-semibold">
+              {panelTone === "on" ? "AI computer is ON" : panelTone === "off" ? "AI computer is OFF" : panelTone === "waking" ? "Starting up…" : "Checking your PC…"}
             </span>
-          )}
+            <span className="text-caption text-ink-secondary">
+              {status !== "checking" && status.state === "ready" ? `Ready · ${status.model}` : null}
+              {checkedAt ? `${status !== "checking" && status.state === "ready" ? " · " : ""}live, last contact ${checkedAt.toLocaleTimeString()}` : null}
+            </span>
+          </div>
+          {status !== "checking" && !pcOn && !waking && !shutdown ? (
+            <Button className="bg-danger text-inverse hover:opacity-90" onClick={() => void startAi()} disabled={wakeBusy}>
+              Start-Beeniara-Ai
+            </Button>
+          ) : null}
+          {status !== "checking" && status.state !== "ready" && !waking ? (
+            <Button variant="ghost" onClick={() => void checkAgain()}>
+              Check again
+            </Button>
+          ) : null}
+          {canShutdown && !shutdown && pcOn ? (
+            <Button className="bg-success text-inverse hover:opacity-90" onClick={startShutdown}>
+              Shut down PC
+            </Button>
+          ) : null}
         </div>
-      ) : null}
-      {wakeMessage ? <p className="mb-3 text-caption text-ink-muted">{wakeMessage}</p> : null}
-      {notice && !wakeMessage ? <p className="mb-3 text-caption text-ink-muted">{notice}</p> : null}
+
+        {waking ? <p className="text-body text-ink-secondary">Wake signal sent. Waiting for the computer to start up, this can take a minute or two…</p> : null}
+        {shutdown ? (
+          <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-chip bg-surface px-3 py-2 text-body text-ink-secondary">
+            {shutdown.phase === "pending" ? (
+              <>
+                <span>
+                  Shutting down the PC in <strong className="tabular-nums">{shutdown.left}s</strong>. Anything else running on it (including other apps&apos; AI) will stop.
+                </span>
+                <Button variant="ghost" onClick={cancelShutdown}>
+                  Cancel
+                </Button>
+              </>
+            ) : shutdown.phase === "sending" ? (
+              <span>Sending the shutdown command…</span>
+            ) : (
+              <span>
+                Command sent. The PC switches off in <strong className="tabular-nums">{shutdown.left}s</strong>.
+              </span>
+            )}
+          </div>
+        ) : null}
+        {wakeMessage ? <p className="text-caption text-ink-secondary">{wakeMessage}</p> : null}
+        {notice && !wakeMessage ? <p className="text-caption text-ink-secondary">{notice}</p> : null}
+      </section>
 
       {status !== "checking" && status.state !== "ready" && !waking ? <Guidance status={status} /> : null}
 
