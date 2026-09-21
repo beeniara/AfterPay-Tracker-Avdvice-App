@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { sendJson } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
+import { readMuted, speak, speechSupported, stopSpeaking, writeMuted } from "@/lib/client/speak";
 import type { ModelStatus } from "@/lib/ask/ollama";
 import { isMoneyColumn, type ResultTable } from "@/lib/ask/prompt";
 import { formatCents, formatDate } from "@/lib/format";
@@ -176,6 +177,11 @@ export function AskBox({ currency }: { currency: string }) {
   const [wakeMessage, setWakeMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
+  const [muted, setMuted] = useState(false);
+  const [canSpeak, setCanSpeak] = useState(false);
+  const mutedRef = useRef(false);
+  // null until the first status arrives, so opening the page never announces anything.
+  const seen = useRef<{ on: boolean; ready: boolean } | null>(null);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -248,6 +254,49 @@ export function AskBox({ currency }: { currency: string }) {
     return () => clearTimeout(timer);
   }, [waking]);
 
+  // Voice preference is read after mount so server and client render the same first HTML.
+  useEffect(() => {
+    const m = readMuted();
+    setMuted(m);
+    mutedRef.current = m;
+    setCanSpeak(speechSupported());
+  }, []);
+
+  const say = useCallback((text: string) => {
+    if (!mutedRef.current) speak(text);
+  }, []);
+
+  function toggleVoice() {
+    const next = !muted;
+    setMuted(next);
+    mutedRef.current = next;
+    writeMuted(next);
+    if (next) stopSpeaking();
+    else speak("Voice is on.");
+  }
+
+  // Announce the PC changing state, whoever caused it (this page, another app, the power button).
+  useEffect(() => {
+    if (status === "checking") return;
+    const now = { on: status.state !== "unreachable" && status.state !== "unconfigured", ready: status.state === "ready" };
+    const before = seen.current;
+    seen.current = now;
+    if (!before) return;
+    if (now.ready && !before.ready) say("The AI is online and available.");
+    else if (!now.on && before.on) say("The PC is now off.");
+  }, [status, say]);
+
+  // Spoken shutdown countdown: the full sentence once, then the last five seconds one by one.
+  useEffect(() => {
+    if (!shutdown) return;
+    if (shutdown.phase === "pending") {
+      if (shutdown.left === SHUTDOWN_GRACE_S) say(`The PC is going to shut down in ${shutdown.left} seconds. Press cancel to stop it.`);
+      else if (shutdown.left <= 5) say(String(shutdown.left));
+    } else if (shutdown.phase === "off") {
+      if (shutdown.left === SHUTDOWN_PC_DELAY_S) say("Shutdown command sent. The PC is switching off.");
+    }
+  }, [shutdown, say]);
+
   async function checkAgain() {
     setNotice(null);
     setWakeMessage(null);
@@ -265,8 +314,10 @@ export function AskBox({ currency }: { currency: string }) {
       setWakeMessage(res.error);
       return;
     }
-    if (status !== "checking" && status.state === "unreachable") setWaking(true);
-    else setWakeMessage("Wake signal sent.");
+    if (status !== "checking" && status.state === "unreachable") {
+      setWaking(true);
+      say("Wake signal sent. The AI will be online soon.");
+    } else setWakeMessage("Wake signal sent.");
   }
 
   function startShutdown() {
@@ -278,6 +329,7 @@ export function AskBox({ currency }: { currency: string }) {
   function cancelShutdown() {
     setShutdown(null);
     setNotice("Shutdown cancelled.");
+    say("Shutdown cancelled.");
   }
 
   // One tick per second: the cancellable countdown runs out into the real
@@ -387,6 +439,11 @@ export function AskBox({ currency }: { currency: string }) {
           {status !== "checking" && status.state !== "ready" && !waking ? (
             <Button variant="ghost" onClick={() => void checkAgain()}>
               Check again
+            </Button>
+          ) : null}
+          {canSpeak ? (
+            <Button variant="ghost" onClick={toggleVoice} aria-pressed={!muted} title="Spoken announcements">
+              {muted ? "Voice: off" : "Voice: on"}
             </Button>
           ) : null}
           {canShutdown && !shutdown && pcOn ? (
