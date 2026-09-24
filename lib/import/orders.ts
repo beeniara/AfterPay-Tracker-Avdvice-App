@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { colorSeedFor } from "@/lib/color-seed";
-import { addDays, isIsoDate } from "@/lib/dates";
-import type { Db } from "@/lib/db";
+import { addDays, isIsoDate, todayIso } from "@/lib/dates";
+import type { Db, DbClient } from "@/lib/db";
 import { refreshOrderStatus } from "@/lib/db/orders";
 import { instalments, orders, payments, providers, type ProviderKind } from "@/lib/db/schema";
 import { alignToCycle, allocatePaid, computeOrder, generateSchedule, type ScheduledInstalment } from "@/lib/ledger";
@@ -25,6 +25,9 @@ export interface ImportOptions {
   intervalDays: number;
   cycleAnchor?: string;
   replace: boolean;
+  // Bring orders already present (by order number) up to the export's amount
+  // owing instead of skipping them. Off: the old skip behaviour.
+  updateExisting?: boolean;
 }
 
 export interface PreparedRow {
@@ -48,7 +51,18 @@ export interface ImportPlan {
   statusMismatches: number;
 }
 
-function normaliseDate(value: string): string | null {
+// Some exports prefix the order number with the channel: "In-Store #123" or
+// "Online #123". The bare number is what identifies the order.
+export function normaliseReference(value: string): { reference: string; channel?: "online" | "in_store" } {
+  const trimmed = value.trim();
+  const prefixed = /^(.*?)\s*#\s*(\S.*)$/.exec(trimmed);
+  if (!prefixed) return { reference: trimmed };
+  const label = prefixed[1]!.trim();
+  const channel = /in.?store/i.test(label) ? "in_store" : /online/i.test(label) ? "online" : undefined;
+  return channel ? { reference: prefixed[2]!.trim(), channel } : { reference: prefixed[2]!.trim() };
+}
+
+export function normaliseDate(value: string): string | null {
   const trimmed = value.trim();
   if (isIsoDate(trimmed)) return trimmed;
   const dmy = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(trimmed);
@@ -71,7 +85,7 @@ export function prepareImport(rows: readonly ImportRowInput[], options: ImportOp
       if (!purchasedOn) throw new Error(`Unrecognised date "${row.date}"`);
       const merchant = row.merchant.trim();
       if (!merchant) throw new Error("Merchant is empty");
-      const reference = row.reference.trim();
+      const { reference, channel: referenceChannel } = normaliseReference(row.reference);
       if (!reference) throw new Error("Order number is empty");
       if (seen.has(reference)) throw new Error(`Duplicate order number ${reference}`);
       seen.add(reference);
@@ -106,7 +120,7 @@ export function prepareImport(rows: readonly ImportRowInput[], options: ImportOp
         line,
         merchant,
         reference,
-        channel: /in.?store/i.test(row.channel ?? "") ? "in_store" : "online",
+        channel: row.channel?.trim() ? (/in.?store/i.test(row.channel) ? "in_store" : "online") : (referenceChannel ?? "online"),
         purchasedOn,
         total,
         owing,
@@ -131,7 +145,49 @@ export function prepareImport(rows: readonly ImportRowInput[], options: ImportOp
 export interface ImportResult {
   providerId: string;
   imported: number;
+  // Already present and brought up to the export's amount owing.
+  updated: number;
+  // Already present and needing no change (or skipped when updateExisting is off).
   skipped: number;
+}
+
+// Re-allocates what has been paid on an existing order so that what it owes
+// matches the export. Instalments whose paid amount changes get their payment
+// rows replaced by a single one, so fees, refunds and notes are untouched.
+async function syncExistingOrder(
+  tx: DbClient,
+  orderId: string,
+  row: PreparedRow,
+  today: string,
+): Promise<boolean> {
+  const current = await tx.query.instalments.findMany({
+    where: eq(instalments.orderId, orderId),
+    orderBy: (i, { asc }) => [asc(i.sequence)],
+  });
+  const target = allocatePaid(
+    current.map((i) => i.principalCents),
+    Math.max(0, Math.min(row.total, row.total - row.owing)),
+  );
+  let changed = false;
+  const now = new Date();
+  for (const [index, inst] of current.entries()) {
+    const paid = target[index] ?? 0;
+    if (inst.paidCents === paid) continue;
+    changed = true;
+    await tx.delete(payments).where(eq(payments.instalmentId, inst.id));
+    await tx.update(instalments).set({ paidCents: paid, updatedAt: now }).where(eq(instalments.id, inst.id));
+    if (paid > 0) {
+      await tx.insert(payments).values({
+        instalmentId: inst.id,
+        amountCents: paid,
+        paidOn: inst.dueOn < today ? inst.dueOn : today,
+        method: "card",
+        reference: "order-history export",
+      });
+    }
+  }
+  if (changed) await refreshOrderStatus(tx, orderId, today);
+  return changed;
 }
 
 export async function commitImport(
@@ -139,6 +195,7 @@ export async function commitImport(
   userId: string,
   plan: ImportPlan,
   options: ImportOptions,
+  today: string = todayIso(),
 ): Promise<ImportResult> {
   return db.transaction(async (tx) => {
     const [provider] = await tx
@@ -156,6 +213,7 @@ export async function commitImport(
     if (options.replace) await tx.delete(orders).where(eq(orders.providerId, providerId));
 
     let imported = 0;
+    let updated = 0;
     let skipped = 0;
     for (const row of plan.rows) {
       const existing = await tx.query.orders.findFirst({
@@ -163,7 +221,8 @@ export async function commitImport(
         columns: { id: true },
       });
       if (existing) {
-        skipped++;
+        if (options.updateExisting && (await syncExistingOrder(tx, existing.id, row, today))) updated++;
+        else skipped++;
         continue;
       }
       const [order] = await tx
@@ -188,9 +247,9 @@ export async function commitImport(
         .filter((i) => i.paidCents > 0)
         .map((i) => ({ instalmentId: i.id, amountCents: i.paidCents, paidOn: i.dueOn, method: "card" as const }));
       if (paymentRows.length) await tx.insert(payments).values(paymentRows);
-      await refreshOrderStatus(tx, order!.id);
+      await refreshOrderStatus(tx, order!.id, today);
       imported++;
     }
-    return { providerId, imported, skipped };
+    return { providerId, imported, updated, skipped };
   });
 }

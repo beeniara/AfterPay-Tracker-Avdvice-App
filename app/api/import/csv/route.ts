@@ -25,6 +25,7 @@ const bodySchema = z.object({
     intervalDays: z.coerce.number().int().min(1).max(366).default(14),
     cycleAnchor: isoDateParam.optional().or(z.literal("").transform(() => undefined)),
     replace: z.coerce.boolean().default(false),
+    updateExisting: z.coerce.boolean().default(true),
   }),
 });
 
@@ -51,7 +52,7 @@ function summarise(plan: ImportPlan, currency: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { db, user } = await requireContext();
+    const { db, user, today } = await requireContext();
     const body = parseBody(bodySchema, await readJson(request));
     const options = { ...body.options, currency: user.currency };
     const plan = prepareImport(body.rows, options);
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     if (plan.errors.length) {
       return NextResponse.json({ error: "Fix the invalid rows before importing", ...summarise(plan, user.currency) }, { status: 400 });
     }
-    const result = await commitImport(db, user.id, plan, options);
+    const result = await commitImport(db, user.id, plan, options, today);
     revalidateMoneyPaths();
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

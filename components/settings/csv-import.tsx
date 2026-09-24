@@ -102,9 +102,10 @@ export function CsvImport({ providers }: { providers: Provider[] }) {
         intervalDays: String(data.get("intervalDays") ?? "14"),
         cycleAnchor: String(data.get("cycleAnchor") ?? ""),
         replace: data.get("replace") === "on",
+        updateExisting: data.get("updateExisting") === "on",
       },
     };
-    const res = await sendJson<Preview | { imported: number; skipped: number }>("POST", "/api/import/csv", body);
+    const res = await sendJson<Preview | { imported: number; updated: number; skipped: number }>("POST", "/api/import/csv", body);
     setBusy(false);
     if (!res.ok) {
       setError(res.error);
@@ -112,8 +113,13 @@ export function CsvImport({ providers }: { providers: Provider[] }) {
     }
     if (mode === "preview") setPreview(res.data as Preview);
     else {
-      const r = res.data as { imported: number; skipped: number };
-      setResult(`Imported ${r.imported} orders${r.skipped ? `, skipped ${r.skipped} already present` : ""}.`);
+      const r = res.data as { imported: number; updated: number; skipped: number };
+      const parts = [
+        `${r.imported} orders added`,
+        r.updated ? `${r.updated} already present brought up to date` : null,
+        r.skipped ? `${r.skipped} already present and unchanged` : null,
+      ].filter(Boolean);
+      setResult(`${parts.join(", ")}.`);
       setPreview(null);
       setCsv(null);
       router.refresh();
@@ -204,10 +210,16 @@ export function CsvImport({ providers }: { providers: Provider[] }) {
             <Field label="Collection cycle day (optional)" hint="Any due date from the provider, if they collect on fixed days">
               <input type="date" name="cycleAnchor" className={inputClass} />
             </Field>
-            <label className="flex items-center gap-2 self-end pb-2 text-caption text-ink-secondary">
-              <input type="checkbox" name="replace" className="size-4" />
-              Replace this provider&apos;s existing orders
-            </label>
+            <div className="flex flex-col gap-2 self-end pb-2 text-caption text-ink-secondary">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="updateExisting" defaultChecked className="size-4" />
+                Update orders already present to the export&apos;s amount owing
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="replace" className="size-4" />
+                Replace this provider&apos;s existing orders (deletes them first)
+              </label>
+            </div>
           </fieldset>
 
           {missing.length ? (
@@ -255,7 +267,7 @@ export function CsvImport({ providers }: { providers: Provider[] }) {
           <FormError message={error} />
           <div className="flex items-center gap-3">
             <Button type="submit" disabled={busy || missing.length > 0 || !providerName}>
-              {busy ? "Working…" : preview && preview.invalid === 0 ? `Import ${preview.valid} orders` : "Preview"}
+              {busy ? "Working…" : preview && preview.invalid === 0 ? `Import ${preview.valid} rows` : "Preview"}
             </Button>
             {preview ? (
               <button type="button" onClick={() => setPreview(null)} className="text-caption font-medium text-ink-muted underline underline-offset-2">

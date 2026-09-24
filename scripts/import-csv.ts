@@ -2,7 +2,7 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { parseCsv } from "@/lib/csv";
-import { assertIsoDate } from "@/lib/dates";
+import { assertIsoDate, todayIso } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import { users, type ProviderKind } from "@/lib/db/schema";
 import { commitImport, prepareImport } from "@/lib/import/orders";
@@ -21,24 +21,28 @@ const { values: args } = parseArgs({
     // purchase + interval. Omit for schedules that start on the purchase date.
     "cycle-anchor": { type: "string" },
     replace: { type: "boolean", default: false },
+    // Skip orders already present instead of updating them to the export's owing.
+    "no-update": { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
   },
 });
 
+// Each column may appear under any of these headers (older and newer export formats).
 const COLUMNS = {
-  date: "Date",
-  merchant: "Merchant",
-  status: "Status",
-  channel: "Channel",
-  reference: "Order No",
-  totalAmount: "Order Amount",
-  amountOwing: "Amount Owing",
+  date: ["Date", "Purchase date"],
+  merchant: ["Merchant"],
+  status: ["Status"],
+  channel: ["Channel"],
+  reference: ["Order No", "Order no."],
+  totalAmount: ["Order Amount", "Order amount (NZD)"],
+  amountOwing: ["Amount Owing", "Amount owing (NZD)"],
 } as const;
+const OPTIONAL = new Set<keyof typeof COLUMNS>(["status", "channel"]);
 
 function usage(message: string): never {
   console.error(message);
   console.error(
-    "\nUsage: pnpm import:csv --file <path.csv> --provider <name> [--kind bnpl|store_finance|loan|other] [--currency NZD] [--user email] [--instalments 4] [--interval 14] [--cycle-anchor YYYY-MM-DD] [--replace] [--dry-run]",
+    "\nUsage: pnpm import:csv --file <path.csv> --provider <name> [--kind bnpl|store_finance|loan|other] [--currency NZD] [--user email] [--instalments 4] [--interval 14] [--cycle-anchor YYYY-MM-DD] [--replace] [--no-update] [--dry-run]",
   );
   process.exit(1);
 }
@@ -47,8 +51,19 @@ async function main() {
   if (!args.file || !args.provider) usage("--file and --provider are required");
 
   const { headers, rows } = parseCsv(readFileSync(args.file, "utf8"));
-  const missing = Object.values(COLUMNS).filter((h) => !headers.includes(h));
-  if (missing.length) usage(`CSV is missing columns: ${missing.join(", ")}`);
+  const col = Object.fromEntries(
+    (Object.keys(COLUMNS) as (keyof typeof COLUMNS)[]).map((key) => [
+      key,
+      COLUMNS[key].find((h) => headers.some((x) => x.toLowerCase() === h.toLowerCase())),
+    ]),
+  ) as Record<keyof typeof COLUMNS, string | undefined>;
+  const missing = (Object.keys(COLUMNS) as (keyof typeof COLUMNS)[]).filter((k) => !OPTIONAL.has(k) && !col[k]);
+  if (missing.length) usage(`CSV is missing columns: ${missing.map((k) => COLUMNS[k].join(" / ")).join(", ")}`);
+  const cell = (r: Record<string, string>, key: keyof typeof COLUMNS): string | undefined => {
+    const header = col[key];
+    if (!header) return undefined;
+    return r[Object.keys(r).find((h) => h.toLowerCase() === header.toLowerCase()) ?? header];
+  };
 
   const options = {
     providerName: args.provider,
@@ -58,16 +73,17 @@ async function main() {
     intervalDays: Number(args.interval),
     cycleAnchor: args["cycle-anchor"] ? assertIsoDate(args["cycle-anchor"]) : undefined,
     replace: args.replace!,
+    updateExisting: !args["no-update"],
   };
   const plan = prepareImport(
     rows.map((r) => ({
-      date: r[COLUMNS.date] ?? "",
-      merchant: r[COLUMNS.merchant] ?? "",
-      status: r[COLUMNS.status],
-      channel: r[COLUMNS.channel],
-      reference: r[COLUMNS.reference] ?? "",
-      totalAmount: r[COLUMNS.totalAmount] ?? "",
-      amountOwing: r[COLUMNS.amountOwing] ?? "",
+      date: cell(r, "date") ?? "",
+      merchant: cell(r, "merchant") ?? "",
+      status: cell(r, "status"),
+      channel: cell(r, "channel"),
+      reference: cell(r, "reference") ?? "",
+      totalAmount: cell(r, "totalAmount") ?? "",
+      amountOwing: cell(r, "amountOwing") ?? "",
     })),
     options,
   );
@@ -91,8 +107,8 @@ async function main() {
     .values({ email: args.user!, currency: options.currency })
     .onConflictDoUpdate({ target: users.email, set: { email: args.user! } })
     .returning();
-  const result = await commitImport(db, user!.id, plan, options);
-  console.log(`Imported ${result.imported} orders, skipped ${result.skipped} already present.`);
+  const result = await commitImport(db, user!.id, plan, options, todayIso(user!.timeZone));
+  console.log(`Imported ${result.imported} orders, updated ${result.updated} already present, ${result.skipped} unchanged.`);
   await db.$client.end();
 }
 

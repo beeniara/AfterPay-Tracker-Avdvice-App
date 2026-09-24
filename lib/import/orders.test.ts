@@ -51,6 +51,28 @@ describe("prepareImport", () => {
     ]);
   });
 
+  it("strips a channel prefix from the order number and reads the channel from it", () => {
+    const plan = prepareImport(
+      [
+        row({ reference: "In-Store #990123467", channel: undefined }),
+        row({ reference: "Online #990902187", channel: undefined }),
+        row({ reference: "#12", channel: undefined }),
+        row({ reference: " 34 ", channel: undefined }),
+        // An explicit channel column still wins.
+        row({ reference: "Online #56", channel: "In-Store" }),
+      ],
+      options,
+    );
+    expect(plan.errors).toEqual([]);
+    expect(plan.rows.map((r) => [r.reference, r.channel])).toEqual([
+      ["990123467", "in_store"],
+      ["990902187", "online"],
+      ["12", "online"],
+      ["34", "online"],
+      ["56", "in_store"],
+    ]);
+  });
+
   it("accepts d/m/y dates and flags status disagreements", () => {
     const plan = prepareImport(
       [

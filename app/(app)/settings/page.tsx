@@ -4,6 +4,7 @@ import { ChangePasswordForm } from "@/components/auth/change-password-form";
 import { PasskeyManager } from "@/components/auth/passkey-manager";
 import { CsvImport } from "@/components/settings/csv-import";
 import { ProfileForm } from "@/components/settings/profile-form";
+import { UpcomingImport } from "@/components/settings/upcoming-import";
 import { ThemeControls } from "@/components/theme/theme-controls";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, HeroCard } from "@/components/ui/card";
@@ -64,9 +65,21 @@ export default async function SettingsPage() {
       <Card>
         <h2 className="mb-1 text-heading">Import order history</h2>
         <p className="mb-5 text-caption text-ink-muted">
-          Upload a CSV with one row per order, match its columns, preview, then import. Orders already present (by order number) are skipped.
+          Upload a CSV with one row per order, match its columns, preview, then import. New orders are added; orders already
+          present (by order number) are brought up to the export&apos;s amount owing. Nothing is deleted unless you tick
+          &ldquo;replace&rdquo;.
         </p>
         <CsvImport providers={providers} />
+      </Card>
+
+      <Card>
+        <h2 className="mb-1 text-heading">Update from upcoming payments</h2>
+        <p className="mb-5 text-caption text-ink-muted">
+          Upload the provider&apos;s upcoming-payments export (one row per instalment still to pay). Active orders get
+          their due dates and paid instalments corrected, orders the export no longer lists are marked paid off, and
+          new ones are added. Nothing is deleted.
+        </p>
+        <UpcomingImport providers={providers} />
       </Card>
 
       <Card>

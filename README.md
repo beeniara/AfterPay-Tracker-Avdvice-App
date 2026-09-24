@@ -45,8 +45,43 @@ pnpm import:csv --file data/orders.csv --provider "My provider"
 
 The importer rebuilds each order's pay-in-4 schedule (last instalment absorbs
 rounding), allocates what has been paid in order, and refuses any row whose
-reconstructed balance doesn't match the CSV. Re-running skips orders already
-present by order number; `--replace` wipes that provider's orders first.
+reconstructed balance doesn't match the CSV. Re-running with a newer export
+brings orders already present (by order number) up to its amount owing — paid
+instalments are added or undone as needed, nothing else on the order is touched
+(`--no-update` to skip them instead); `--replace` wipes that provider's orders
+first. Order numbers like `In-Store #123` are stored as `123`, with the channel
+taken from the prefix when the CSV has no channel column. The newer export
+headers (`Purchase date`, `Order no.`, `Order amount (NZD)`, `Amount owing (NZD)`)
+are recognised as well as the older ones.
+
+When you have both exports, import the order history first and then the upcoming
+payments (below): the history fixes what is owed, the upcoming file fixes when.
+
+## Keeping it current from an upcoming-payments export
+
+Providers also export the payments still to come — one row per instalment
+(`Merchant, Payment no., Due date, Amount due`), with no order numbers. Settings →
+Update from upcoming payments (or `pnpm import:upcoming`) reconciles that file
+against the orders already present instead of replacing them:
+
+- each row is matched to an order by merchant, "k of n", amount and a purchase-date
+  window; the matched instalment takes the export's due date, instalments the export
+  doesn't list are marked paid, and ones it lists that the app thought were paid are
+  re-opened;
+- settled orders the export still lists a payment for are re-opened (`--skip-settled`
+  to leave them alone);
+- active orders missing from the export are marked paid off (`--keep-missing` to
+  leave them alone);
+- rows that match nothing become new orders, with the purchase date and total
+  estimated and a note saying so (`--no-create` to skip).
+
+Nothing is ever deleted. The preview shows the owing total before and after, which
+should land on the export's own total.
+
+```bash
+pnpm import:upcoming --file data/upcoming.csv --provider "My provider" --dry-run
+pnpm import:upcoming --file data/upcoming.csv --provider "My provider"
+```
 
 By default instalments fall fortnightly from the purchase date. Providers that
 collect on a fixed fortnightly cycle instead take `--cycle-anchor YYYY-MM-DD`
