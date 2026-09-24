@@ -25,6 +25,8 @@ export const orderStatusEnum = pgEnum("order_status", [
   "cancelled",
 ]);
 export const feeKindEnum = pgEnum("fee_kind", ["late", "establishment", "other"]);
+// 'advice' rows hold a pay-off plan (JSON in `answer`) rather than a question and its answer.
+export const askKindEnum = pgEnum("ask_kind", ["question", "advice"]);
 export const paymentMethodEnum = pgEnum("payment_method", [
   "card",
   "bank",
@@ -219,6 +221,7 @@ export const askHistory = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    kind: askKindEnum("kind").notNull().default("question"),
     question: text("question").notNull(),
     answer: text("answer"),
     sql: text("sql"),
@@ -295,6 +298,7 @@ export type Payment = typeof payments.$inferSelect;
 export type Refund = typeof refunds.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type AskHistoryRow = typeof askHistory.$inferSelect;
+export type AskKind = AskHistoryRow["kind"];
 export type Passkey = typeof passkeys.$inferSelect;
 export type ProviderKind = Provider["kind"];
 export type OrderChannel = Order["channel"];

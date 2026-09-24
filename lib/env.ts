@@ -7,6 +7,9 @@ const envSchema = z.object({
   TEST_DATABASE_URL: z.url().optional(),
   OLLAMA_URL: z.preprocess(blankToUndefined, z.url().optional()),
   OLLAMA_MODEL: z.preprocess(blankToUndefined, z.string().min(1).optional()),
+  // Optional different model for the pay-off plan (a general model plans better than the
+  // coder model Ask needs for SQL). Blank, or not installed: the plan uses OLLAMA_MODEL.
+  OLLAMA_ADVICE_MODEL: z.preprocess(blankToUndefined, z.string().min(1).optional()),
   // Wake-on-LAN for the Ollama PC. The app never sends the packet itself (a
   // Docker bridge can't broadcast onto the LAN); it asks the host-network "wol"
   // sidecar through the shared spool folder. Blank MAC disables waking.

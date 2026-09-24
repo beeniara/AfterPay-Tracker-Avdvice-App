@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyStatus, hostOf } from "./ollama";
+import { chooseModel, classifyStatus, hostOf } from "./ollama";
 
 const url = "http://100.119.142.62:11434";
 
@@ -40,5 +40,22 @@ describe("classifyStatus", () => {
 
   it("falls back to the raw string for an unparsable host", () => {
     expect(hostOf("not a url")).toBe("not a url");
+  });
+});
+
+describe("chooseModel", () => {
+  const installed = ["coder:14b", "general:12b"];
+
+  it("uses the preferred model when it is installed", () => {
+    expect(chooseModel(installed, "coder:14b", "general:12b")).toBe("general:12b");
+  });
+
+  it("keeps the default when nothing is preferred", () => {
+    expect(chooseModel(installed, "coder:14b")).toBe("coder:14b");
+    expect(chooseModel(installed, "coder:14b", "")).toBe("coder:14b");
+  });
+
+  it("never names a model that isn't installed", () => {
+    expect(chooseModel(installed, "coder:14b", "missing:7b")).toBe("coder:14b");
   });
 });

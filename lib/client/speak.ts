@@ -35,6 +35,12 @@ export function speak(text: string): void {
   }
 }
 
+// For output that should follow the person's Voice on/off choice (read fresh
+// each time, since more than one card on the page can speak).
+export function sayIfUnmuted(text: string): void {
+  if (!readMuted()) speak(text);
+}
+
 export function stopSpeaking(): void {
   if (!speechSupported()) return;
   try {

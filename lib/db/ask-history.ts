@@ -1,8 +1,10 @@
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import type { DbClient } from "./index";
-import { askHistory, type AskHistoryRow } from "./schema";
+import { askHistory, type AskHistoryRow, type AskKind } from "./schema";
 
 export interface RecordAsk {
+  // Defaults to a plain question; advice rows keep their JSON plan in `answer`.
+  kind?: AskKind;
   question: string;
   answer: string | null;
   sql: string | null;
@@ -18,21 +20,33 @@ export async function recordAsk(db: DbClient, userId: string, input: RecordAsk):
   return row!;
 }
 
-export async function listAskHistory(db: DbClient, userId: string, limit = 20): Promise<AskHistoryRow[]> {
+export async function listAskHistory(
+  db: DbClient,
+  userId: string,
+  limit = 20,
+  kind?: AskKind,
+): Promise<AskHistoryRow[]> {
   return db.query.askHistory.findMany({
-    where: eq(askHistory.userId, userId),
+    where: kind ? and(eq(askHistory.userId, userId), eq(askHistory.kind, kind)) : eq(askHistory.userId, userId),
     orderBy: [desc(askHistory.createdAt)],
     limit,
   });
 }
 
 // Question text only, from everyone else, so one person's answers (which
-// carry their own figures) never show up for another.
+// carry their own figures) never show up for another. Advice rows are never
+// shared: their "question" is the person's own note about paydays and budget.
 export async function listSharedQuestions(db: DbClient, exceptUserId: string, limit = 12): Promise<string[]> {
   const rows = await db
     .select({ question: askHistory.question, latest: sql<string>`max(${askHistory.createdAt})` })
     .from(askHistory)
-    .where(and(ne(askHistory.userId, exceptUserId), sql`${askHistory.answer} is not null`))
+    .where(
+      and(
+        ne(askHistory.userId, exceptUserId),
+        eq(askHistory.kind, "question"),
+        sql`${askHistory.answer} is not null`,
+      ),
+    )
     .groupBy(askHistory.question)
     .orderBy(desc(sql`max(${askHistory.createdAt})`))
     .limit(limit);

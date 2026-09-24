@@ -89,6 +89,59 @@ collect on a fixed fortnightly cycle instead take `--cycle-anchor YYYY-MM-DD`
 last cycle day on or before purchase + 14 days. Check the result against the
 provider's own "due in 15/30/60 days" figures.
 
+## Assistance Beeniara (the local AI)
+
+Two cards on `/insights` use the Ollama model on the PC (`OLLAMA_URL`, `OLLAMA_MODEL`;
+the panel under "Ask about your orders" shows whether the PC is on and can wake it):
+
+- **Ask about your orders** — a question becomes one read-only SQL query, scoped to your
+  data, and the rows are summarised in a sentence or two.
+- **Pay-off plan** — "Get advice" reads *every active order* and returns a step-by-step
+  plan: a summary, ordered steps (what to pay, when, how much, why) and warnings. An
+  optional note (max 600 characters, e.g. "I get paid fortnightly on Thursdays and can
+  spare $300") is passed along as context, not as instructions.
+
+How the plan is made: the app builds a digest itself — totals, what falls due in each of
+the next eight weeks, one line per active order (soonest first, at most 60; the rest still
+count in the totals), plus the rule-based advice above it — and the model only reads that,
+so every figure it can quote was computed by the ledger. The reply is JSON, validated
+before it is shown; if it isn't usable the model is asked once more. The plan is
+guidance only: the app and the model never move money, and the model is told not to
+suggest borrowing or any financial product. Amounts in the plan are the model's own
+figures, so the card says to check dates against Upcoming before paying.
+
+Past plans are kept (Previous advice) and can be deleted. They are stored in `ask_history`
+with `kind = 'advice'` and are never offered to other people as suggested questions. Use a
+model with at least an 8k context window: the plan request asks Ollama for `num_ctx` 8192,
+because Ollama's default silently drops the start of a long prompt. If the digest would not
+fit (with room left for the reply), the order list is trimmed, soonest first; the totals and
+the week and fortnight tables always cover every order.
+
+Two checks keep the model honest. Every due date is spelled out per fortnight, so a
+budgeting window is never read as a deadline; and any amount chip on a step that is not a
+figure from the digest (or one you typed in the note) is removed, so an invented sum never
+reaches the screen.
+
+**Which model.** Ask needs a coder model to write SQL; planning reads better from a general
+one. Set `OLLAMA_ADVICE_MODEL` (e.g. `gemma3:12b`) to use a different installed model for
+plans only; blank or not installed falls back to `OLLAMA_MODEL`. On the same live orders,
+`qwen2.5-coder:14b` gave a one-step plan while `gemma3:12b` gave a week-by-week one and
+flagged the fortnight that exceeded the stated budget. Switching models makes Ollama
+reload, a few seconds when moving between Ask and a plan.
+
+**Applying a schema change on this deployment.** The image only runs `pnpm start`, and the
+live database was created with `db:push`, so migrations are not run on deploy. Before
+pushing a commit that adds a column, back up and apply it by hand (additive changes are
+safe while the old code is still running):
+
+```bash
+docker exec <db-container> pg_dump -U owing owing > ~/backups/owing-before-change.sql
+docker exec -i <db-container> psql -U owing -d owing < drizzle/0003_ask_history_kind.sql
+```
+
+Don't use `db:migrate` here: with no `__drizzle_migrations` table it would replay
+`0000` against tables that already exist.
+
 ## Checks
 
 ```bash

@@ -71,6 +71,12 @@ export async function listModels(url: string): Promise<{ ok: true; models: strin
   }
 }
 
+// The model a task should run on: the preferred one if it is installed, otherwise
+// the one the status already settled on. Never names a model that isn't there.
+export function chooseModel(installed: readonly string[], fallback: string, preferred?: string): string {
+  return preferred && installed.includes(preferred) ? preferred : fallback;
+}
+
 export async function modelStatus(config: ModelConfig): Promise<ModelStatus> {
   if (!config.url) return { state: "unconfigured" };
   return classifyStatus(config, await listModels(config.url));
@@ -85,7 +91,9 @@ export async function chat(
   url: string,
   model: string,
   messages: ChatMessage[],
-  options: { json?: boolean } = {},
+  // numCtx: Ollama's default context is small and silently drops the start of a
+  // long prompt, so callers sending a lot of data must ask for more.
+  options: { json?: boolean; numCtx?: number; timeoutMs?: number } = {},
 ): Promise<string> {
   let response: Response;
   try {
@@ -99,10 +107,10 @@ export async function chat(
           messages,
           stream: false,
           ...(options.json ? { format: "json" } : {}),
-          options: { temperature: 0 },
+          options: { temperature: 0, ...(options.numCtx ? { num_ctx: options.numCtx } : {}) },
         }),
       },
-      CHAT_TIMEOUT_MS,
+      options.timeoutMs ?? CHAT_TIMEOUT_MS,
     );
   } catch (error) {
     throw new ModelUnreachableError(`Lost contact with the model (${describeFailure(error)})`);

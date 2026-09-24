@@ -59,10 +59,34 @@ describe.skipIf(!url)("ask history", () => {
     expect(await listSharedQuestions(db, other)).toEqual(["second?", "first?"]);
   });
 
+  // These tests share one database in order: the delete test relies on exactly
+  // two of my questions existing, so anything that adds rows goes after it.
   it("deletes only the owner's rows", async () => {
     const [row] = await listAskHistory(db, me, 1);
     expect(await deleteAsk(db, other, row!.id)).toBe(false);
     expect(await deleteAsk(db, me, row!.id)).toBe(true);
     expect((await listAskHistory(db, me)).map((r) => r.question)).toEqual(["first?"]);
+  });
+
+  it("defaults new rows to questions", async () => {
+    const row = await recordAsk(db, me, entry("plain question?"));
+    expect(row.kind).toBe("question");
+  });
+
+  it("keeps advice apart from questions and never shares it", async () => {
+    const plan = JSON.stringify({ summary: "s", steps: [], warnings: [] });
+    await recordAsk(db, other, { ...entry("I get paid on Thursdays", plan), kind: "advice" });
+    await recordAsk(db, me, { ...entry("payday note", plan), kind: "advice" });
+
+    const advice = await listAskHistory(db, me, 20, "advice");
+    expect(advice.map((r) => [r.kind, r.question, r.answer])).toEqual([["advice", "payday note", plan]]);
+    const questions = await listAskHistory(db, me, 20, "question");
+    expect(questions.length).toBeGreaterThan(0);
+    expect(questions.every((r) => r.kind === "question")).toBe(true);
+    expect((await listAskHistory(db, me)).some((r) => r.kind === "advice")).toBe(true);
+
+    // Another person's payday note must never surface as a suggested question.
+    expect(await listSharedQuestions(db, me)).not.toContain("I get paid on Thursdays");
+    expect(await listSharedQuestions(db, other)).not.toContain("payday note");
   });
 });

@@ -16,12 +16,15 @@ type CardProps = {
   children: ReactNode;
   className?: string;
   tint?: CardTint;
+  // An anchor other parts of the page can link to, e.g. href="#ask".
+  id?: string;
 };
 
-export function Card({ children, className, tint = "surface" }: CardProps) {
+export function Card({ children, className, tint = "surface", id }: CardProps) {
   return (
     <section
-      className={cn("mt-4 rounded-card px-7 py-6", tints[tint], className)}
+      id={id}
+      className={cn("mt-4 scroll-mt-4 rounded-card px-7 py-6", tints[tint], className)}
     >
       {children}
     </section>

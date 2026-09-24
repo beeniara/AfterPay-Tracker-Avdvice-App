@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { sendJson } from "@/lib/client/api";
+import { publishStatus } from "@/lib/client/model-status";
 import { cn } from "@/lib/cn";
 import { clearWakeTimer, DEFAULT_ESTIMATE_S, describeWake, finishWakeTimer, lastWakeSeconds, pendingWakeStart, startWakeTimer } from "@/lib/client/wake-timing";
 import { readMuted, speak, speechSupported, stopSpeaking, writeMuted } from "@/lib/client/speak";
@@ -208,6 +209,7 @@ export function AskBox({ currency }: { currency: string }) {
       next = { state: "unreachable", host: "server", reason: "network error" };
     }
     setStatus(next);
+    publishStatus(next);
     setCheckedAt(new Date());
     setCanShutdown(Boolean(next.canShutdown));
     // A page loaded mid-boot (or after a reload) resumes the waking view.
@@ -221,7 +223,8 @@ export function AskBox({ currency }: { currency: string }) {
 
   const loadHistory = useCallback(async () => {
     try {
-      const response = await fetch("/api/ask/history");
+      // Pay-off plans live in the same table; they have their own card.
+      const response = await fetch("/api/ask/history?kind=question");
       if (response.ok) setHistory((await response.json()) as History);
     } catch {
       // History is a convenience; the box still works without it.
@@ -420,6 +423,7 @@ export function AskBox({ currency }: { currency: string }) {
     }
     if ("status" in res.data) {
       setStatus(res.data.status);
+      publishStatus(res.data.status);
       return;
     }
     setResult(res.data);

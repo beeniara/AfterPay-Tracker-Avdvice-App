@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AdviceBox } from "@/components/insights/advice-box";
 import { AdviceList } from "@/components/insights/advice-list";
 import { AskBox } from "@/components/insights/ask-box";
 import { StatusBadge } from "@/components/ui/badge";
@@ -90,7 +91,15 @@ export default async function InsightsPage() {
         <AdviceList advice={insights.advice} />
       </Card>
 
-      <Card tint="tint-2">
+      <Card tint="tint-3" id="pay-off-plan">
+        <h2 className="mb-1 text-heading">Pay-off plan from Assistance Beeniara</h2>
+        <p className="mb-4 text-caption text-ink-muted">
+          Every active order, studied by the model on your PC and turned into a step-by-step plan for paying them off.
+        </p>
+        <AdviceBox currency={user.currency} activeOrders={insights.activeOrders} />
+      </Card>
+
+      <Card tint="tint-2" id="ask">
         <h2 className="mb-1 text-heading">Ask about your orders</h2>
         <p className="mb-4 text-caption text-ink-muted">Plain questions, answered from your own data by the model running on your PC.</p>
         <AskBox currency={user.currency} />
